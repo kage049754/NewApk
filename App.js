@@ -1037,7 +1037,9 @@ export default function App() {
         <View style={styles.formOverlay}>
           <View style={styles.formCard}>
             <Text style={styles.heading}>{active === 'Budget' ? (budgetFormMode === 'goal' ? 'New savings goal' : budgetFormMode === 'contribution' ? 'Add to savings' : budgetType === 'income' ? 'Add income' : 'Add expense') : active === 'Tasks' ? 'New task' : 'New note'}</Text>
-            <TextInput value={draft} onChangeText={setDraft} placeholder={active === 'Budget' ? 'Transaction name' : 'Title'} placeholderTextColor={colors.muted} style={styles.input} />
+            {active !== 'Budget' || budgetFormMode === 'transaction' ? (
+              <TextInput value={draft} onChangeText={setDraft} placeholder={active === 'Budget' ? 'Transaction name' : 'Title'} placeholderTextColor={colors.muted} style={styles.input} />
+            ) : null}
             {active === 'Tasks' ? <>
               <Text style={styles.fieldLabel}>CATEGORY</Text>
               <View style={styles.choiceRow}>

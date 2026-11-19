@@ -60,3 +60,8 @@ Implement the Lecture Files #14 document library with local file import, subject
 - GitHub Actions run #21 for commit `c0ac58192526f9f8f86db289cf364bbc802a6258` completed successfully; all job steps, including Android debug APK compilation and artifact upload, passed.
 - Artifact `NewApk-debug` was uploaded (33,193,948 bytes; artifact ID `14502746052`). This verifies build and upload only, not emulator launch or runtime behavior.
 - A source review caught and corrected an over-escaped due-date format validator in the follow-up commit; that correction requires its own passing build.
+
+## Budget form review
+- Corrected the shared budget modal so savings-goal forms do not show a transaction-title field and contribution forms only show the contribution amount.
+- Budget build run #23 for commit `94bb6966076d8414acb4c67b5b7ec9fc3bccea63` completed successfully. The `NewApk-debug` artifact was uploaded (33,193,947 bytes; artifact ID `14502738584`).
+- The modal correction is committed separately and requires its own passing build.
