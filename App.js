@@ -418,6 +418,80 @@ export default function App() {
     </>
   );
 
+  const renderSchedule = () => {
+    const visibleClasses = allClasses.filter(item => Number(item.day_of_week) === scheduleDay);
+    const orderedDays = [1, 2, 3, 4, 5, 6, 0];
+    return (
+      <>
+        <View style={styles.scheduleHeaderRow}>
+          <View>
+            <Text style={styles.scheduleEyebrow}>YOUR WEEK</Text>
+            <Text style={styles.scheduleHeading}>Class timetable</Text>
+          </View>
+          <Pressable onPress={() => setScheduleDay(new Date().getDay())} style={styles.todayButton}>
+            <Text style={styles.todayButtonText}>Today</Text>
+          </Pressable>
+        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.weekdayStrip}>
+          {orderedDays.map(day => (
+            <Pressable key={day} onPress={() => setScheduleDay(day)} style={[styles.weekdayChip, scheduleDay === day && styles.weekdayChipSelected]}>
+              <Text style={[styles.weekdayLabel, scheduleDay === day && styles.weekdayLabelSelected]}>{DAYS[day].slice(0, 3)}</Text>
+              <Text style={[styles.weekdayNumber, scheduleDay === day && styles.weekdayNumberSelected]}>{day === new Date().getDay() ? '•' : String(day + 1)}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+        <View style={styles.sectionBlock}>
+          <SectionTitle title={DAYS[scheduleDay] + ' classes'} />
+          <Card>
+            {visibleClasses.length ? visibleClasses.map(item => (
+              <View key={item.id} style={styles.classRow}>
+                <View style={styles.classTime}>
+                  <Text style={styles.classStart}>{formatClock(item.start_time)}</Text>
+                  <Text style={styles.classEnd}>{formatClock(item.end_time)}</Text>
+                </View>
+                <View style={[styles.classColor, {backgroundColor: item.subject_color || colors.primary}]} />
+                <View style={styles.classInfo}>
+                  <Text style={styles.className}>{item.subject_name || 'Unassigned subject'}</Text>
+                  <Text style={styles.classMeta}>{item.subject_code || 'No subject code'} · {item.class_type}</Text>
+                  <Text style={styles.classRoom}>{item.room || item.subject_room || 'Room not set'}</Text>
+                </View>
+                <Pressable onPress={() => removeClass(item)} style={styles.classRemove}>
+                  <Text style={styles.classRemoveText}>×</Text>
+                </Pressable>
+              </View>
+            )) : (
+              <View style={styles.emptySchedule}>
+                <View style={styles.emptyScheduleIcon}><Text style={styles.emptyScheduleGlyph}>▦</Text></View>
+                <Text style={styles.emptyScheduleTitle}>No classes on {DAYS[scheduleDay]}</Text>
+                <Text style={styles.emptyScheduleText}>Add a class to build your weekly timetable.</Text>
+              </View>
+            )}
+          </Card>
+          <View style={styles.scheduleButtons}>
+            <View style={styles.scheduleButtonFlex}><Action label="＋ Add class" onPress={() => openScheduleForm('class')} /></View>
+            <View style={styles.scheduleButtonFlex}><Action label="＋ Add subject" secondary onPress={() => openScheduleForm('subject')} /></View>
+          </View>
+        </View>
+        <View style={styles.sectionBlock}>
+          <SectionTitle title="My subjects" />
+          <Card>
+            {subjects.map(subject => (
+              <View key={subject.id} style={styles.subjectManageRow}>
+                <View style={[styles.subjectTileMark, {backgroundColor: subject.color || colors.primary}]} />
+                <View style={styles.subjectManageInfo}>
+                  <Text style={styles.className}>{subject.name}</Text>
+                  <Text style={styles.classMeta}>{subject.code || 'No subject code'}{subject.professor ? ' · ' + subject.professor : ''}</Text>
+                  <Text style={styles.classRoom}>{subject.room || 'No default room'}</Text>
+                </View>
+              </View>
+            ))}
+            {!subjects.length ? <Empty label="No subjects yet. Add a subject to start creating your timetable." /> : null}
+          </Card>
+        </View>
+      </>
+    );
+  };
+
   const renderList = (items, type) => (
     <Card>
       {items.map(item => (
@@ -474,9 +548,7 @@ export default function App() {
         </View>
       </>;
     }
-    if (active === 'Schedule') {
-      return <Card><Heading>Class schedule</Heading><Empty label="Your weekly timetable and subject management are the next Schedule implementation step." /><Action label="＋ Add class" onPress={() => Alert.alert('Schedule setup', 'The class editor will be added in the Schedule implementation step.')} /></Card>;
-    }
+    if (active === 'Schedule') return renderSchedule();
     if (active === 'Files') return <Card><Heading>Lecture Files</Heading><Empty label="Organize PDFs, documents, and images by subject. File importing and offline viewing are planned." /></Card>;
     return (
       <>
