@@ -105,12 +105,66 @@ export default function App() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const addItem = async () => {
-    const value = draft.trim();
-    if (!value) {
-      Alert.alert('Missing title', 'Enter a title before saving.');
-      return;
-    }
     try {
+      if (active === 'Schedule') {
+        if (scheduleFormType === 'subject') {
+          const name = scheduleSubjectName.trim();
+          if (!name) {
+            Alert.alert('Missing subject name', 'Enter a subject name before saving.');
+            return;
+          }
+          await execute(
+            'INSERT INTO subjects (name, code, room, professor, color) VALUES (?, ?, ?, ?, ?)',
+            [name, scheduleSubjectCode.trim(), scheduleSubjectRoom.trim(), scheduleProfessor.trim(), scheduleSubjectColor.trim() || '#55745B'],
+          );
+        } else {
+          const startValid = /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(scheduleStart);
+          const endValid = /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(scheduleEnd);
+          if (!startValid || !endValid) {
+            Alert.alert('Invalid time', 'Use 24-hour time in HH:MM format, such as 08:30.');
+            return;
+          }
+          const toMinutes = value => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
+          if (toMinutes(scheduleEnd) <= toMinutes(scheduleStart)) {
+            Alert.alert('Invalid class duration', 'The end time must be later than the start time.');
+            return;
+          }
+          const subjectId = Number(scheduleClassSubjectId);
+          if (!subjectId || !subjects.some(subject => subject.id === subjectId)) {
+            Alert.alert('Choose a subject', 'Select a subject for this class.');
+            return;
+          }
+          const day = Number(scheduleClassDay);
+          const conflicts = await query(
+            'SELECT id FROM classes WHERE day_of_week = ? AND start_time < ? AND end_time > ?',
+            [day, scheduleEnd, scheduleStart],
+          );
+          if (conflicts.length) {
+            Alert.alert('Schedule conflict', 'This time overlaps with another class on ' + DAYS[day] + '. Choose a different time.');
+            return;
+          }
+          await execute(
+            'INSERT INTO classes (subject_id, day_of_week, start_time, end_time, room, class_type) VALUES (?, ?, ?, ?, ?, ?)',
+            [subjectId, day, scheduleStart, scheduleEnd, scheduleClassRoom.trim(), scheduleClassType],
+          );
+          setScheduleDay(day);
+        }
+        setScheduleSubjectName('');
+        setScheduleSubjectCode('');
+        setScheduleSubjectRoom('');
+        setScheduleProfessor('');
+        setScheduleSubjectColor('#55745B');
+        setScheduleClassRoom('');
+        setShowForm(false);
+        await refresh();
+        return;
+      }
+
+      const value = draft.trim();
+      if (!value) {
+        Alert.alert('Missing title', 'Enter a title before saving.');
+        return;
+      }
       if (active === 'Tasks') {
         await execute('INSERT INTO tasks (title, details) VALUES (?, ?)', [value, detail.trim()]);
       } else if (active === 'Notepad') {
@@ -166,6 +220,35 @@ export default function App() {
       Alert.alert('Could not update task', String(error));
     }
   };
+
+  const openScheduleForm = type => {
+    if (type === 'class' && !subjects.length) {
+      Alert.alert('Add a subject first', 'Create a subject before adding its class.', [
+        {text: 'Cancel', style: 'cancel'},
+        {text: 'Add subject', onPress: () => openScheduleForm('subject')},
+      ]);
+      return;
+    }
+    setScheduleFormType(type);
+    setScheduleClassDay(scheduleDay);
+    setScheduleClassSubjectId(subjects.length ? String(subjects[0].id) : '');
+    setShowForm(true);
+  };
+
+  const removeClass = item => {
+    Alert.alert('Remove class?', 'This will remove this class from your timetable.', [
+      {text: 'Cancel', style: 'cancel'},
+      {text: 'Remove', style: 'destructive', onPress: async () => {
+        try {
+          await execute('DELETE FROM classes WHERE id = ?', [item.id]);
+          await refresh();
+        } catch (error) {
+          Alert.alert('Could not remove class', String(error));
+        }
+      }},
+    ]);
+  };
+
 
   const Card = ({children, style}) => <View style={[styles.card, style]}>{children}</View>;
   const Heading = ({children, muted = false}) => <Text style={muted ? styles.muted : styles.heading}>{children}</Text>;
