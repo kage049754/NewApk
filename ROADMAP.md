@@ -6,6 +6,9 @@
 - Excluded: attendance, calculator, study timer/Pomodoro, date calculator, unit converter, grade calculator, IT/CS utilities, exam reminders, student registration/login, announcements, group chat, group creation, group leadership, member search, online administration, invitation links/QR, admin approval, announcement images.
 - CampusOS-inspired Forest, Sunset, Monochrome and customizable appearance.
 
+- Standalone Academics tab removed; subjects remain managed through Schedule.
+- Budget is a primary navigation module.
+
 ## Milestones
 - [x] Inspect CampusOS source repository and document feature scope.
 - [x] Create initial React Native Android project foundation.
@@ -14,6 +17,7 @@
 - [ ] Verify first GitHub Actions build and fix all build failures.
 - [ ] Complete schedule CRUD, weekly timetable and conflict detection.
 - [ ] Complete tasks, personal activities, notes and subject linking.
+- [ ] Complete budget transactions, income/expense categories, monthly limits and savings goals.
 - [ ] Implement lecture file import and offline viewing.
 - [ ] Implement complete dashboard aggregation and cross-module refresh.
 - [ ] Implement alarms, local notifications and reminder scheduling.
