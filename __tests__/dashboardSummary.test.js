@@ -36,6 +36,43 @@ describe('Home dashboard task summary', () => {
   });
 });
 
+describe('Home dashboard next-class summary', () => {
+  const monday = new Date(2026, 10, 23);
+
+  test('returns the class currently in progress', () => {
+    const classes = [
+      {id: 1, start_time: '08:00', end_time: '09:30', subject_name: 'ITEC 80'},
+      {id: 2, start_time: '10:00', end_time: '11:00', subject_name: 'MATH'},
+    ];
+    expect(getNextClassSummary(classes, new Date(2026, 10, 23, 8, 30))).toMatchObject({
+      state: 'ongoing',
+      item: {id: 1, subject_name: 'ITEC 80'},
+      minutesUntilEnd: 60,
+    });
+  });
+
+  test('selects the earliest future class and ignores invalid time rows', () => {
+    const classes = [
+      {id: 3, start_time: '13:00', end_time: '14:00'},
+      {id: 2, start_time: '10:00', end_time: '11:00'},
+      {id: 1, start_time: '29:00', end_time: '30:00'},
+      {id: 4, start_time: '08:00', end_time: '07:00'},
+    ];
+    expect(getNextClassSummary(classes, new Date(2026, 10, 23, 9, 15))).toMatchObject({
+      state: 'upcoming',
+      item: {id: 2},
+      minutesUntilStart: 45,
+    });
+  });
+
+  test('distinguishes a finished day from an empty timetable', () => {
+    expect(getNextClassSummary([
+      {id: 1, start_time: '08:00', end_time: '09:00'},
+    ], new Date(2026, 10, 23, 10, 0))).toMatchObject({state: 'finished', item: null});
+    expect(getNextClassSummary([], monday)).toMatchObject({state: 'empty', item: null});
+  });
+});
+
 describe('Home dashboard savings summary', () => {
   test('combines targets and savings across goals and caps displayed progress', () => {
     const result = getSavingsSummary([

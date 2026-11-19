@@ -7,7 +7,7 @@ import {
 import {createPlannerBackup, execute, getDashboardSummary, openDatabase, query, restorePlannerBackup} from './src/data/database';
 import {defaultCustomPalette, palettes} from './src/theme/palettes';
 import {convertCampusOsBackup} from './src/data/campusOsMigration';
-import {getDashboardTaskSummary, getSavingsSummary} from './src/data/dashboardSummary';
+import {getDashboardTaskSummary, getNextClassSummary, getSavingsSummary} from './src/data/dashboardSummary';
 
 const tabs = [
   {id: 'Home', icon: '⌂'}, {id: 'Schedule', icon: '▦'},
@@ -1494,6 +1494,7 @@ export default function App() {
   const now = new Date();
   const taskSummary = getDashboardTaskSummary(tasks, now);
   const {pendingTasks, dueThisWeek, overdueTasks} = taskSummary;
+  const nextClassSummary = getNextClassSummary(todayClasses, now);
   const savingsSummary = getSavingsSummary(savingsGoals);
   const savingsTargetTotal = savingsSummary.targetTotal;
   const savingsCurrentTotal = savingsSummary.currentTotal;
@@ -1546,6 +1547,27 @@ export default function App() {
           </View>
         ))}
       </View>
+
+      {nextClassSummary.item ? (
+        <View style={styles.sectionBlock}>
+          <SectionTitle title={nextClassSummary.state === 'ongoing' ? 'Happening now' : 'Up next'} action="Open schedule" onPress={() => {setActive('Schedule'); setScheduleDay(now.getDay()); setScheduleView('Day');}} />
+          <Pressable
+            onPress={() => {setActive('Schedule'); setScheduleDay(now.getDay()); setScheduleView('Day');}}
+            style={[styles.nextClassCard, {backgroundColor: colors.surface, borderColor: colors.border}]}
+            accessibilityRole="button"
+            accessibilityLabel={'Open schedule for ' + (nextClassSummary.item.subject_name || 'upcoming class')}
+          >
+            <View style={[styles.nextClassMarker, {backgroundColor: nextClassSummary.item.subject_color || colors.primary}]} />
+            <View style={styles.nextClassInfo}>
+              <Text style={styles.nextClassEyebrow}>{nextClassSummary.state === 'ongoing' ? 'IN PROGRESS' : 'UP NEXT TODAY'}</Text>
+              <Text style={styles.nextClassName} numberOfLines={1}>{nextClassSummary.item.subject_name || 'Scheduled class'}</Text>
+              <Text style={styles.nextClassDetails}>{formatClock(nextClassSummary.item.start_time)} – {formatClock(nextClassSummary.item.end_time)}</Text>
+              <Text style={styles.nextClassDetails}>{nextClassSummary.item.subject_code || nextClassSummary.item.class_type || 'Class'} · {nextClassSummary.item.room || nextClassSummary.item.subject_room || 'Room not set'}</Text>
+            </View>
+            <Text style={styles.rowChevron}>›</Text>
+          </Pressable>
+        </View>
+      ) : null}
 
       <View style={styles.sectionBlock}>
         <SectionTitle title="Today's classes" action="See schedule" onPress={() => setActive('Schedule')} />
@@ -2804,6 +2826,12 @@ function makeStyles(c) {
     heading: {fontSize: 16, fontWeight: '800', color: c.text},
     muted: {fontSize: 12, color: c.muted},
     bodyText: {fontSize: 13, color: c.muted, lineHeight: 20},
+    nextClassCard: {flexDirection: 'row', alignItems: 'center', gap: 12, padding: 15, borderRadius: 19, borderWidth: 1},
+    nextClassMarker: {width: 5, alignSelf: 'stretch', borderRadius: 4, minHeight: 58},
+    nextClassInfo: {flex: 1, gap: 3},
+    nextClassEyebrow: {fontSize: 9, letterSpacing: 1, color: c.primary, fontWeight: '900'},
+    nextClassName: {fontSize: 15, color: c.text, fontWeight: '800'},
+    nextClassDetails: {fontSize: 10, color: c.muted, fontWeight: '600'},
     classRow: {flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 7, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border},
     classTime: {width: 68},
     classStart: {fontSize: 11, color: c.text, fontWeight: '800'},

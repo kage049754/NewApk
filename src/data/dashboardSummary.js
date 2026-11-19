@@ -34,6 +34,31 @@ function getDashboardTaskSummary(tasks = [], now = new Date()) {
   return {pendingTasks, dueThisWeek, overdueTasks, todayKey, weekEndKey};
 }
 
+function getNextClassSummary(classes = [], now = new Date()) {
+  const safeNow = now instanceof Date && Number.isFinite(now.getTime()) ? now : new Date();
+  const currentMinutes = safeNow.getHours() * 60 + safeNow.getMinutes();
+  const rows = (Array.isArray(classes) ? classes : [])
+    .map(item => {
+      const startMatch = /^(?:([01]\\d|2[0-3])):([0-5]\\d)$/.exec(String(item && item.start_time || ''));
+      const endMatch = /^(?:([01]\\d|2[0-3])):([0-5]\\d)$/.exec(String(item && item.end_time || ''));
+      if (!startMatch || !endMatch) return null;
+      const startMinutes = Number(startMatch[1]) * 60 + Number(startMatch[2]);
+      const endMinutes = Number(endMatch[1]) * 60 + Number(endMatch[2]);
+      if (endMinutes <= startMinutes) return null;
+      return {item, startMinutes, endMinutes};
+    })
+    .filter(Boolean)
+    .sort((left, right) => left.startMinutes - right.startMinutes || left.endMinutes - right.endMinutes);
+
+  const ongoing = rows.find(row => row.startMinutes <= currentMinutes && row.endMinutes > currentMinutes);
+  if (ongoing) return {state: 'ongoing', item: ongoing.item, minutesUntilEnd: ongoing.endMinutes - currentMinutes};
+
+  const upcoming = rows.find(row => row.startMinutes > currentMinutes);
+  if (upcoming) return {state: 'upcoming', item: upcoming.item, minutesUntilStart: upcoming.startMinutes - currentMinutes};
+
+  return {state: rows.length ? 'finished' : 'empty', item: null, minutesUntilStart: null, minutesUntilEnd: null};
+}
+
 function getSavingsSummary(goals = []) {
   const rows = Array.isArray(goals) ? goals : [];
   const normalizedGoals = rows.map(goal => {
@@ -54,4 +79,4 @@ function getSavingsSummary(goals = []) {
   };
 }
 
-module.exports = {getDashboardTaskSummary, getSavingsSummary};
+module.exports = {getDashboardTaskSummary, getNextClassSummary, getSavingsSummary};
