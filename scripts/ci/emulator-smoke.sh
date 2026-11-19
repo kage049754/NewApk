@@ -281,7 +281,7 @@ create_activity_reminder() {
   # Use the emulator clock so the activity is always five minutes in the future
   # in the same timezone that React Native and AlarmManager use.
   local device_now
-  device_now="$(adb shell date '+%Y-%m-%d %H:%M' | tr -d '\r')"
+  device_now="$(adb shell "date '+%Y-%m-%d %H:%M'" | tr -d '\r')"
   local date_value start_value end_value
   read -r date_value start_value end_value <<< "$(python3 - "$device_now" <<'PY'
 from datetime import datetime, timedelta
@@ -295,7 +295,7 @@ PY
 )"
   echo "REMINDER TEST: activity date=$date_value start=$start_value end=$end_value device_now=$device_now" | tee "$REPORT_DIR/reminder-test.txt"
 
-  ui_scroll_to_text "Personal activities"
+  ui_scroll_to_text "＋ Add activity"
   ui_click_text "＋ Add activity"
   ui_wait_text "New activity"
   ui_replace_accessible_input "Activity name" "$TEST_ACTIVITY_TITLE"
