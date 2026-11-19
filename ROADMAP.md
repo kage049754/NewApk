@@ -41,7 +41,8 @@
 - [x] Implement module-aware JSON backup/export and validated restore/import (Lecture File contents remain device-local).
 - [x] Add validated CampusOS Backup v1/v2 migration for full Homepage, Schedule, Tasks and Academics exports, including subject-linked notes and Base64 lecture files (up to 12 MB total).
 - [x] Add Jest unit tests for CampusOS backup conversion, malformed/partial input, timetable row validation and lecture attachment size limits.
-- [ ] Add automated unit and UI tests.
+- [x] Add Jest tests for Home task week boundaries, overdue separation, date validation and combined savings progress.
+- [ ] Expand automated unit and UI test coverage beyond the CampusOS migration and Home dashboard calculation suites.
 - [ ] Verify emulator launch, persistence, navigation and notification behavior.
 - [ ] Prepare release APK and document physical-device testing separately.
 

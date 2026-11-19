@@ -1507,7 +1507,7 @@ export default function App() {
             <Text style={styles.heroEyebrow}>{dateLabel.toUpperCase()}</Text>
             <Text style={styles.heroGreeting}>{greetingForHour(now.getHours())}{profileName ? ', ' + profileName : ''}</Text>
           </View>
-          <View style={styles.heroAvatar}><Text style={styles.heroAvatarText}>N</Text></View>
+          <View style={styles.heroAvatar}><Text style={styles.heroAvatarText}>{(profileName.trim().charAt(0) || 'N').toUpperCase()}</Text></View>
         </View>
         <Text style={styles.heroTitle}>Make today count.</Text>
         <Text style={styles.heroSubtitle}>Your classes, plans, and progress at a glance.</Text>

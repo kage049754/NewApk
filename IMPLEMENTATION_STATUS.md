@@ -234,3 +234,13 @@ Implement local reminder scheduling for classes, tasks and personal activities (
 - Downloaded standalone QA artifact `NewApk-standalone-qa` (artifact ID `14540598014`; ZIP size 19,380,182 bytes). ZIP archive integrity passed; extracted `app-release.apk` is 48,057,485 bytes, contains `classes.dex` and `assets/index.android.bundle` (988,076 bytes), and passed APK ZIP integrity inspection.
 - Standalone QA APK SHA-256: `678895cdb2894c24f81fa045e846f668dc9a30d6033e1e73eb7d2390c76b7f53`.
 - GitHub CI's signature verification passed. This remains a QA build signed with the generated Android debug key, not a production-signed release. Emulator launch and physical-device behavior remain unverified.
+
+
+## Dashboard summary helper and regression tests
+- Extracted pure Home dashboard calculations into `src/data/dashboardSummary.js`: pending task selection, due-today-through-Sunday counts, overdue task separation, calendar-date validation, combined savings totals and capped goal progress.
+- Added Jest coverage for weekday and Sunday boundaries, completed tasks, overdue tasks, missing/invalid dates, combined savings totals, over-target progress and invalid goal amounts.
+- The first test run (#49, commit `cfe0d55521f0f445240577745bce6a9004ce5ebf`) failed two task-date tests. The log identified an over-escaped date regex that rejected valid ISO date strings; the existing CampusOS migration suite passed.
+- Corrected the regex in commit `f6ea2c88de5c94920a07e71b5645dddc46800670`. GitHub Actions run #50 passed all 10 tests, Android debug and standalone QA builds, bundle/signature verification, both artifact uploads and full runner cleanup.
+- Downloaded standalone QA artifact `NewApk-standalone-qa` (artifact ID `14543302221`; ZIP size 19,381,069 bytes). The extracted APK is 48,058,325 bytes, contains `classes.dex` and `assets/index.android.bundle` (989,356 bytes), and passed APK ZIP integrity inspection.
+- Standalone QA APK SHA-256: `7413a8c77c3b6926de561d86fd900f2e1845bd7a11a8f6f82c4e35258f0e98ef`.
+- CI signature verification passed. It is a QA build signed with the generated Android debug key, not a production-signed release. Runtime and physical-device tests remain pending.
