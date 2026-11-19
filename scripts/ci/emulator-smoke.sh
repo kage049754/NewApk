@@ -52,8 +52,16 @@ if grep -Eiq 'FATAL EXCEPTION|Unable to load script|Invariant Violation|Unhandle
   exit 1
 fi
 
+if grep -Fq "Storage unavailable" "$REPORT_DIR/window.xml"; then
+  echo "Storage initialization error dialog appeared; current Android UI hierarchy:" >&2
+  cat "$REPORT_DIR/window.xml" >&2
+  echo "See home-screen.png and logcat-errors.txt in this artifact." >&2
+  exit 1
+fi
+
 if [[ "$HOME_RENDERED" != "true" ]]; then
   echo "Home screen text was not found in the emulator UI hierarchy." >&2
+  cat "$REPORT_DIR/window.xml" >&2
   exit 1
 fi
 

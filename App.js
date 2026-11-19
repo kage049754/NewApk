@@ -475,7 +475,14 @@ export default function App() {
         }
         await refresh();
       })
-      .catch(error => Alert.alert('Storage unavailable', String(error)))
+      .catch(error => {
+        console.error('NewApk storage initialization failed:', error);
+        let message = error?.message || error?.errorMessage || null;
+        if (!message) {
+          try { message = JSON.stringify(error); } catch (_) {}
+        }
+        Alert.alert('Storage unavailable', message || String(error) || 'Unknown SQLite error.');
+      })
       .finally(() => setLoading(false));
   }, []);
 
