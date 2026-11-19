@@ -59,6 +59,15 @@ export async function openDatabase() {
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY(subject_id) REFERENCES subjects(id) ON DELETE SET NULL
     );`);
+    const [noteColumnInfo] = await tx.executeSql('PRAGMA table_info(notes);');
+    const existingNoteColumns = [];
+    for (let i = 0; i < noteColumnInfo.rows.length; i += 1) {
+      existingNoteColumns.push(noteColumnInfo.rows.item(i).name);
+    }
+    if (!existingNoteColumns.includes('category')) {
+      await tx.executeSql("ALTER TABLE notes ADD COLUMN category TEXT NOT NULL DEFAULT 'General';");
+    }
+    await tx.executeSql('CREATE INDEX IF NOT EXISTS idx_notes_pinned_updated ON notes (pinned, updated_at);');
     await tx.executeSql(`CREATE TABLE IF NOT EXISTS activities (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       title TEXT NOT NULL,

@@ -72,3 +72,9 @@ Implement the Lecture Files #14 document library with local file import, subject
 - Added FileProvider-backed opening with Android apps, local deletion, subject association, category labels, search and PDF/image/document filters.
 - Added `lecture_files` SQLite metadata and a private-file provider path. No storage-wide permission or cloud service is required.
 - Build and runtime verification for this native module is pending; external viewer availability depends on apps installed on the device.
+
+## Notepad module update
+- Added a note-library screen with category filters, text search, pinned-note count and compact note cards.
+- Notes can be created, edited, pinned/unpinned, deleted and optionally linked to a subject.
+- Added a backward-compatible SQLite migration for the new note category field; existing notes remain intact and default to General.
+- Build and runtime verification are pending.

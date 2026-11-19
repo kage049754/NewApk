@@ -18,7 +18,8 @@
 - [x] Verify initial and iterative GitHub Actions debug APK builds.
 - [x] Implement the core weekly timetable, subject/class creation, class removal and overlap detection.
 - [x] Implement the Tasks overview with categories, priorities, due dates, search, filters and completion tracking.
-- [ ] Complete task editing, checklists, personal activities, notes and subject linking.
+- [x] Implement Notepad categories, subject linking, note editing, pinning, search and deletion.
+- [ ] Complete task editing, checklists, personal activities and task-note linking.
 - [ ] Complete budget analytics, category limits and savings-goal tracking.
 - [x] Add the offline lecture-file library, subject/category grouping, Android document picker, private file copies and external-app opening (CI/runtime verification pending).
 - [ ] Implement complete dashboard aggregation and cross-module refresh.

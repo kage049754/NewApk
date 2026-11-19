@@ -16,6 +16,7 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const EXPENSE_CATEGORIES = ['Food', 'Transport', 'School', 'Personal', 'Bills', 'Other'];
 const INCOME_CATEGORIES = ['Allowance', 'Salary', 'Gift', 'Other'];
+const NOTE_CATEGORIES = ['General', 'Lecture', 'Ideas', 'Personal', 'Other'];
 
 function formatClock(value) {
   if (!value) return '';
@@ -97,6 +98,11 @@ export default function App() {
   const [taskFilter, setTaskFilter] = useState('All');
   const [taskSearch, setTaskSearch] = useState('');
   const [notes, setNotes] = useState([]);
+  const [noteCategory, setNoteCategory] = useState('General');
+  const [noteSubjectId, setNoteSubjectId] = useState('');
+  const [noteFilter, setNoteFilter] = useState('All');
+  const [noteSearch, setNoteSearch] = useState('');
+  const [editingNoteId, setEditingNoteId] = useState(null);
   const [lectureFiles, setLectureFiles] = useState([]);
   const [fileSubjectFilter, setFileSubjectFilter] = useState('All');
   const [fileTypeFilter, setFileTypeFilter] = useState('All');
@@ -131,7 +137,7 @@ export default function App() {
       getDashboardSummary(),
       query('SELECT * FROM subjects ORDER BY name'),
       query("SELECT * FROM tasks ORDER BY completed, CASE WHEN due_at IS NULL THEN 1 ELSE 0 END, due_at ASC, CASE priority WHEN 'High' THEN 0 WHEN 'Medium' THEN 1 ELSE 2 END, id DESC"),
-      query('SELECT * FROM notes ORDER BY pinned DESC, id DESC'),
+      query('SELECT notes.*, subjects.name AS subject_name, subjects.code AS subject_code FROM notes LEFT JOIN subjects ON subjects.id = notes.subject_id ORDER BY notes.pinned DESC, notes.updated_at DESC, notes.id DESC'),
       query('SELECT lecture_files.*, subjects.name AS subject_name, subjects.code AS subject_code FROM lecture_files LEFT JOIN subjects ON subjects.id = lecture_files.subject_id ORDER BY lecture_files.imported_at DESC, lecture_files.id DESC'),
       query('SELECT classes.*, subjects.name AS subject_name, subjects.code AS subject_code, subjects.color AS subject_color, subjects.room AS subject_room FROM classes LEFT JOIN subjects ON subjects.id = classes.subject_id ORDER BY classes.day_of_week, classes.start_time'),
       query('SELECT * FROM activities WHERE starts_at IS NOT NULL ORDER BY starts_at ASC LIMIT 5'),
@@ -243,7 +249,17 @@ export default function App() {
           [value, detail.trim(), dueDate || null, taskPriority, taskCategory],
         );
       } else if (active === 'Notepad') {
-        await execute('INSERT INTO notes (title, body) VALUES (?, ?)', [value, detail.trim()]);
+        if (editingNoteId) {
+          await execute(
+            'UPDATE notes SET title = ?, body = ?, subject_id = ?, category = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+            [value, detail.trim(), noteSubjectId ? Number(noteSubjectId) : null, noteCategory, editingNoteId],
+          );
+        } else {
+          await execute(
+            'INSERT INTO notes (title, body, subject_id, category) VALUES (?, ?, ?, ?)',
+            [value, detail.trim(), noteSubjectId ? Number(noteSubjectId) : null, noteCategory],
+          );
+        }
       } else if (active === 'Budget') {
         const numericAmount = Number(amount);
         if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
@@ -267,6 +283,9 @@ export default function App() {
       setTaskCategory('Assignment');
       setTaskSearch('');
       setTaskFilter('All');
+      setEditingNoteId(null);
+      setNoteCategory('General');
+      setNoteSubjectId('');
       setBudgetFormMode('transaction');
       setShowForm(false);
       await refresh();
@@ -334,6 +353,38 @@ export default function App() {
           await refresh();
         } catch (error) {
           Alert.alert('Could not delete file', String(error?.message || error));
+        }
+      }},
+    ]);
+  };
+
+  const openNoteForm = note => {
+    setEditingNoteId(note?.id || null);
+    setDraft(note?.title || '');
+    setDetail(note?.body || '');
+    setNoteCategory(note?.category || 'General');
+    setNoteSubjectId(note?.subject_id ? String(note.subject_id) : '');
+    setShowForm(true);
+  };
+
+  const toggleNotePin = async note => {
+    try {
+      await execute('UPDATE notes SET pinned = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [note.pinned ? 0 : 1, note.id]);
+      await refresh();
+    } catch (error) {
+      Alert.alert('Could not update note', String(error?.message || error));
+    }
+  };
+
+  const removeNote = note => {
+    Alert.alert('Delete note?', 'This note will be permanently removed from this device.', [
+      {text: 'Cancel', style: 'cancel'},
+      {text: 'Delete', style: 'destructive', onPress: async () => {
+        try {
+          await execute('DELETE FROM notes WHERE id = ?', [note.id]);
+          await refresh();
+        } catch (error) {
+          Alert.alert('Could not delete note', String(error?.message || error));
         }
       }},
     ]);
@@ -835,6 +886,69 @@ export default function App() {
     </Card>
   );
 
+  const renderNotepad = () => {
+    const visibleNotes = notes.filter(note => {
+      const categoryMatches = noteFilter === 'All' || (note.category || 'General') === noteFilter;
+      const needle = noteSearch.trim().toLowerCase();
+      const searchMatches = !needle || [note.title, note.body, note.category, note.subject_name, note.subject_code]
+        .some(value => String(value || '').toLowerCase().includes(needle));
+      return categoryMatches && searchMatches;
+    });
+    const pinnedCount = notes.filter(note => Number(note.pinned)).length;
+    return (
+      <>
+        <View style={styles.noteHero}>
+          <View style={styles.noteHeroTop}>
+            <View>
+              <Text style={styles.noteHeroEyebrow}>YOUR NOTEBOOK</Text>
+              <Text style={styles.noteHeroTitle}>Ideas worth keeping.</Text>
+            </View>
+            <View style={styles.noteCountBubble}>
+              <Text style={styles.noteCountValue}>{notes.length}</Text>
+              <Text style={styles.noteCountLabel}>NOTES</Text>
+            </View>
+          </View>
+          <Text style={styles.noteHeroCaption}>{pinnedCount} pinned · {subjects.length} subjects available</Text>
+        </View>
+        <TextInput value={noteSearch} onChangeText={setNoteSearch} placeholder="Search notes, details, or subjects" placeholderTextColor={colors.muted} style={styles.taskSearch} returnKeyType="search" />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.noteCategoryStrip}>
+          {['All', ...NOTE_CATEGORIES].map(option => (
+            <Pressable key={option} onPress={() => setNoteFilter(option)} style={[styles.taskFilterChip, noteFilter === option && styles.taskFilterSelected]}>
+              <Text style={[styles.taskFilterText, noteFilter === option && styles.taskFilterTextSelected]}>{option}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+        <View style={styles.noteGrid}>
+          {visibleNotes.map((note, index) => (
+            <View key={note.id} style={[styles.noteCard, {borderTopColor: [colors.primary, '#C68A61', '#8B9BA6', '#B69C64'][index % 4]}]}>
+              <Pressable onPress={() => openNoteForm(note)} style={styles.noteCardContent} accessibilityRole="button" accessibilityLabel={'Edit note ' + note.title}>
+                <View style={styles.noteCardTop}>
+                  <Text style={styles.noteCategoryTag}>{note.category || 'General'}</Text>
+                  {Number(note.pinned) ? <Text style={styles.notePinned}>PINNED</Text> : null}
+                </View>
+                <Text style={styles.noteCardTitle} numberOfLines={2}>{note.title}</Text>
+                <Text style={styles.noteCardBody} numberOfLines={5}>{note.body || 'No additional details.'}</Text>
+                <Text style={styles.noteCardSubject}>{note.subject_code || note.subject_name || 'Personal note'}</Text>
+              </Pressable>
+              <View style={styles.noteCardActions}>
+                <Pressable onPress={() => toggleNotePin(note)} style={styles.noteActionButton} accessibilityRole="button" accessibilityLabel={note.pinned ? 'Unpin note' : 'Pin note'}>
+                  <Text style={styles.noteActionText}>{note.pinned ? 'Unpin' : 'Pin'}</Text>
+                </Pressable>
+                <Pressable onPress={() => removeNote(note)} style={styles.noteActionButton} accessibilityRole="button" accessibilityLabel={'Delete ' + note.title}>
+                  <Text style={styles.noteDeleteText}>Delete</Text>
+                </Pressable>
+              </View>
+            </View>
+          ))}
+        </View>
+        {!visibleNotes.length ? (
+          <Card><Empty label={noteSearch.trim() ? 'No notes match your search.' : noteFilter !== 'All' ? 'No notes in this category yet.' : 'Your notebook is empty. Create a note or save a lecture summary.'} /></Card>
+        ) : null}
+        <Action label="＋ New note" onPress={() => openNoteForm(null)} />
+      </>
+    );
+  };
+
   const renderBudget = () => {
     const observedCategories = transactions
       .filter(item => item.type === 'expense')
@@ -1123,7 +1237,7 @@ export default function App() {
   const renderContent = () => {
     if (active === 'Home') return renderHome();
     if (active === 'Tasks') return renderTasks();
-    if (active === 'Notepad') return <>{renderList(notes, 'Notes')}<Action label="＋ New note" onPress={() => setShowForm(true)} /></>;
+    if (active === 'Notepad') return renderNotepad();
     if (active === 'Budget') return renderBudget();
     if (active === 'Schedule') return renderSchedule();
     if (active === 'Files') return renderFiles();
@@ -1220,7 +1334,7 @@ export default function App() {
       ) : showForm ? (
         <View style={styles.formOverlay}>
           <View style={styles.formCard}>
-            <Text style={styles.heading}>{active === 'Budget' ? (budgetFormMode === 'goal' ? 'New savings goal' : budgetFormMode === 'contribution' ? 'Add to savings' : budgetType === 'income' ? 'Add income' : 'Add expense') : active === 'Tasks' ? 'New task' : 'New note'}</Text>
+            <Text style={styles.heading}>{active === 'Budget' ? (budgetFormMode === 'goal' ? 'New savings goal' : budgetFormMode === 'contribution' ? 'Add to savings' : budgetType === 'income' ? 'Add income' : 'Add expense') : active === 'Tasks' ? 'New task' : active === 'Notepad' && editingNoteId ? 'Edit note' : 'New note'}</Text>
             {active !== 'Budget' || budgetFormMode === 'transaction' ? (
               <TextInput value={draft} onChangeText={setDraft} placeholder={active === 'Budget' ? 'Transaction name' : 'Title'} placeholderTextColor={colors.muted} style={styles.input} />
             ) : null}
@@ -1262,12 +1376,34 @@ export default function App() {
             {active === 'Budget' && budgetFormMode === 'contribution' ? (
               <TextInput value={goalContributionDraft} onChangeText={setGoalContributionDraft} keyboardType="decimal-pad" placeholder="Amount to add (₱)" placeholderTextColor={colors.muted} style={styles.input} />
             ) : null}
-            {active !== 'Budget' || budgetFormMode === 'transaction' ? (
+            {active === 'Notepad' ? <>
+              <Text style={styles.fieldLabel}>NOTE CONTENT</Text>
+              <TextInput value={detail} onChangeText={setDetail} placeholder="Write your note..." placeholderTextColor={colors.muted} style={[styles.input, styles.noteEditor]} multiline textAlignVertical="top" />
+              <Text style={styles.fieldLabel}>CATEGORY</Text>
+              <View style={styles.choiceRow}>
+                {NOTE_CATEGORIES.map(option => (
+                  <Pressable key={option} onPress={() => setNoteCategory(option)} style={[styles.choiceChip, noteCategory === option && styles.choiceChipSelected]}>
+                    <Text style={[styles.choiceChipText, noteCategory === option && styles.choiceChipTextSelected]}>{option}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <Text style={styles.fieldLabel}>LINK TO SUBJECT (OPTIONAL)</Text>
+              <View style={styles.choiceRow}>
+                <Pressable onPress={() => setNoteSubjectId('')} style={[styles.choiceChip, !noteSubjectId && styles.choiceChipSelected]}>
+                  <Text style={[styles.choiceChipText, !noteSubjectId && styles.choiceChipTextSelected]}>None</Text>
+                </Pressable>
+                {subjects.map(subject => (
+                  <Pressable key={subject.id} onPress={() => setNoteSubjectId(String(subject.id))} style={[styles.choiceChip, noteSubjectId === String(subject.id) && styles.choiceChipSelected]}>
+                    <Text style={[styles.choiceChipText, noteSubjectId === String(subject.id) && styles.choiceChipTextSelected]}>{subject.code || subject.name}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </> : active !== 'Budget' || budgetFormMode === 'transaction' ? (
               <TextInput value={detail} onChangeText={setDetail} placeholder="Details (optional)" placeholderTextColor={colors.muted} style={styles.input} />
             ) : null}
             <View style={styles.formActions}>
               <Action label="Cancel" secondary onPress={() => setShowForm(false)} />
-              <Action label={active === 'Budget' ? budgetFormMode === 'goal' ? 'Create goal' : budgetFormMode === 'contribution' ? 'Add savings' : 'Save transaction' : 'Save'} onPress={active === 'Budget' ? budgetFormMode === 'goal' ? saveSavingsGoal : budgetFormMode === 'contribution' ? contributeToSavingsGoal : addItem : addItem} />
+              <Action label={active === 'Budget' ? budgetFormMode === 'goal' ? 'Create goal' : budgetFormMode === 'contribution' ? 'Add savings' : 'Save transaction' : active === 'Notepad' && editingNoteId ? 'Save changes' : 'Save'} onPress={active === 'Budget' ? budgetFormMode === 'goal' ? saveSavingsGoal : budgetFormMode === 'contribution' ? contributeToSavingsGoal : addItem : addItem} />
             </View>
           </View>
         </View>
@@ -1478,5 +1614,28 @@ function makeStyles(c) {
     savingsGoalBottom: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'},
     savingsGoalProgress: {fontSize: 9, color: c.muted, fontWeight: '700'},
     savingsGoalAction: {fontSize: 10, color: c.primary, fontWeight: '900'},
+    noteHero: {backgroundColor: c.primary, borderRadius: 23, padding: 18, gap: 13},
+    noteHeroTop: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'},
+    noteHeroEyebrow: {fontSize: 9, color: '#E4EDE1', letterSpacing: 1.4, fontWeight: '800'},
+    noteHeroTitle: {fontSize: 22, color: '#FFFFFF', fontWeight: '900', marginTop: 6},
+    noteCountBubble: {width: 55, height: 55, borderRadius: 18, backgroundColor: '#FFFFFF24', alignItems: 'center', justifyContent: 'center'},
+    noteCountValue: {fontSize: 20, color: '#FFFFFF', fontWeight: '900'},
+    noteCountLabel: {fontSize: 7, color: '#E4EDE1', fontWeight: '900', letterSpacing: 1},
+    noteHeroCaption: {fontSize: 10, color: '#E4EDE1', fontWeight: '700'},
+    noteCategoryStrip: {gap: 7, paddingRight: 8},
+    noteGrid: {flexDirection: 'row', flexWrap: 'wrap', gap: 10},
+    noteCard: {width: '48%', flexGrow: 1, minWidth: 140, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, borderTopWidth: 4, borderRadius: 16, padding: 11, gap: 9},
+    noteCardContent: {gap: 8, flex: 1},
+    noteCardTop: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 4},
+    noteCategoryTag: {fontSize: 8, color: c.primary, fontWeight: '900', backgroundColor: c.accent + '55', borderRadius: 7, paddingHorizontal: 7, paddingVertical: 4},
+    notePinned: {fontSize: 7, color: '#A66A3B', fontWeight: '900', letterSpacing: 0.4},
+    noteCardTitle: {fontSize: 12, color: c.text, fontWeight: '900', lineHeight: 17},
+    noteCardBody: {fontSize: 10, color: c.muted, lineHeight: 15, minHeight: 45},
+    noteCardSubject: {fontSize: 8, color: c.primary, fontWeight: '800'},
+    noteCardActions: {flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border, paddingTop: 8},
+    noteActionButton: {paddingVertical: 3, paddingHorizontal: 5},
+    noteActionText: {fontSize: 9, color: c.primary, fontWeight: '900'},
+    noteDeleteText: {fontSize: 9, color: c.muted, fontWeight: '800'},
+    noteEditor: {minHeight: 170, lineHeight: 20},
   });
 }
