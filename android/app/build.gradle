@@ -15,6 +15,15 @@ android {
         versionCode 1
         versionName "0.1.0"
     }
+
+    buildTypes {
+        release {
+            // This is a locally installable QA build only. It uses the generated
+            // Android debug key and must not be distributed as a production release.
+            signingConfig signingConfigs.debug
+            minifyEnabled false
+        }
+    }
 }
 
 dependencies {

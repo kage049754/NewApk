@@ -200,3 +200,10 @@ Implement local reminder scheduling for classes, tasks and personal activities (
 - NewApk v1 backups remain supported and preserve existing on-device Lecture Files because those older backups contain only file metadata.
 - CampusOS legacy imports continue to preserve existing NewApk Lecture Files while adding the imported CampusOS attachments.
 - Android and backup-format verification for this change is pending.
+
+
+## Standalone Android APK packaging correction
+- Inspection of the run #41 debug artifact showed that it contains native DEX/resources but no `assets/index.android.bundle`. React Native debug variants intentionally rely on Metro, so this artifact is a development build and is not a standalone install target.
+- Added a signed QA release variant using the generated Android debug key (not a production signing key) so the React Native release bundle is embedded and the APK can be installed without Metro.
+- GitHub Actions now builds both the Metro-connected debug APK and the standalone QA APK, checks for the embedded JS bundle, verifies the APK signature with `apksigner`, and uploads them as separate artifacts.
+- The standalone QA packaging change requires a new CI result. It is not a production-signed release.

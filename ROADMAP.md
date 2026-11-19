@@ -43,3 +43,8 @@
 - [ ] Add automated unit and UI tests.
 - [ ] Verify emulator launch, persistence, navigation and notification behavior.
 - [ ] Prepare release APK and document physical-device testing separately.
+
+
+## APK packaging
+- [x] Add a standalone QA APK with an embedded React Native bundle and CI signature verification.
+- [ ] Prepare the production-signed release APK.
