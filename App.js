@@ -2605,6 +2605,16 @@ export default function App() {
         {!!pageTitle ? <Text style={styles.pageTitle}>{pageTitle}</Text> : null}
         {renderContent()}
       </ScrollView>
+      <View style={styles.tabBar}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabContent}>
+          {tabs.map(tab => (
+            <Pressable key={tab.id} onPress={() => {setActive(tab.id); setShowForm(false); setShowActivityForm(false);}} style={[styles.tab, active === tab.id && styles.activeTab]}>
+              <Text style={[styles.tabIcon, active === tab.id && styles.activeTabText]}>{tab.icon}</Text>
+              <Text style={[styles.tabLabel, active === tab.id && styles.activeTabText]}>{tab.id === 'Notepad' ? 'Notes' : tab.id}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      </View>
       {showActivityForm ? (
         <View style={styles.formOverlay}>
           <View style={styles.formCard}>
@@ -2691,6 +2701,7 @@ export default function App() {
         <View style={styles.formOverlay}>
           <View style={styles.formCard}>
             <Text style={styles.heading}>{active === 'Budget' ? (budgetFormMode === 'goal' ? 'New savings goal' : budgetFormMode === 'contribution' ? 'Add to savings' : editingTransactionId ? (budgetType === 'income' ? 'Edit income' : 'Edit expense') : budgetType === 'income' ? 'Add income' : 'Add expense') : active === 'Tasks' ? (editingTaskId ? 'Edit task' : 'New task') : active === 'Notepad' && editingNoteId ? 'Edit note' : 'New note'}</Text>
+            <ScrollView style={styles.modalFormBody} keyboardShouldPersistTaps="handled">
             {active !== 'Budget' || budgetFormMode === 'transaction' ? (
               <TextInput value={draft} onChangeText={setDraft} placeholder={active === 'Budget' ? 'Transaction name' : 'Title'} placeholderTextColor={colors.muted} style={styles.input} />
             ) : null}
@@ -2772,6 +2783,7 @@ export default function App() {
             </> : active !== 'Budget' || budgetFormMode === 'transaction' ? (
               <TextInput value={detail} onChangeText={setDetail} placeholder="Details (optional)" placeholderTextColor={colors.muted} style={styles.input} />
             ) : null}
+            </ScrollView>
             <View style={styles.formActions}>
               <Action label="Cancel" secondary onPress={() => setShowForm(false)} />
               <Action label={active === 'Budget' ? budgetFormMode === 'goal' ? 'Create goal' : budgetFormMode === 'contribution' ? 'Add savings' : editingTransactionId ? 'Save changes' : 'Save transaction' : active === 'Notepad' && editingNoteId ? 'Save changes' : 'Save'} onPress={active === 'Budget' ? budgetFormMode === 'goal' ? saveSavingsGoal : budgetFormMode === 'contribution' ? contributeToSavingsGoal : addItem : addItem} />
@@ -2779,16 +2791,6 @@ export default function App() {
           </View>
         </View>
       ) : null}
-      <View style={styles.tabBar}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabContent}>
-          {tabs.map(tab => (
-            <Pressable key={tab.id} onPress={() => {setActive(tab.id); setShowForm(false); setShowActivityForm(false);}} style={[styles.tab, active === tab.id && styles.activeTab]}>
-              <Text style={[styles.tabIcon, active === tab.id && styles.activeTabText]}>{tab.icon}</Text>
-              <Text style={[styles.tabLabel, active === tab.id && styles.activeTabText]}>{tab.id === 'Notepad' ? 'Notes' : tab.id}</Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-      </View>
     </SafeAreaView>
   );
 }
@@ -2899,10 +2901,12 @@ function makeStyles(c) {
     tabIcon: {fontSize: 17, color: c.muted, fontWeight: '700'},
     tabLabel: {fontSize: 9, color: c.muted, marginTop: 3, fontWeight: '700'},
     activeTabText: {color: c.primary},
-    formOverlay: {position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: '#0008', justifyContent: 'center', padding: 20},
-    formCard: {backgroundColor: c.surface, borderRadius: 22, padding: 18, gap: 12},
+    // Render above the fixed tab bar; long forms scroll inside a bounded card.
+    formOverlay: {position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: '#0008', justifyContent: 'center', padding: 20, zIndex: 20, elevation: 20},
+    formCard: {backgroundColor: c.surface, borderRadius: 22, padding: 18, gap: 12, maxHeight: '88%', flexShrink: 1},
+    modalFormBody: {flexShrink: 1, minHeight: 0},
     input: {borderWidth: 1, borderColor: c.border, borderRadius: 12, paddingHorizontal: 13, paddingVertical: 11, color: c.text, fontSize: 14},
-    formActions: {flexDirection: 'row', gap: 10, justifyContent: 'flex-end'},
+    formActions: {flexDirection: 'row', gap: 10, justifyContent: 'flex-end', flexShrink: 0},
     scheduleHeaderRow: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'},
     scheduleEyebrow: {fontSize: 9, color: c.muted, letterSpacing: 1.5, fontWeight: '800'},
     scheduleHeading: {fontSize: 21, color: c.text, fontWeight: '800', marginTop: 3},
