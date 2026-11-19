@@ -332,6 +332,7 @@ export default function App() {
   const [goalContributionDraft, setGoalContributionDraft] = useState('');
   const [selectedGoalId, setSelectedGoalId] = useState(null);
   const [budgetFormMode, setBudgetFormMode] = useState('transaction');
+  const [editingTransactionId, setEditingTransactionId] = useState(null);
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState('Other');
   const [budgetLimitDraft, setBudgetLimitDraft] = useState('');
@@ -440,6 +441,7 @@ export default function App() {
         setTaskFilter('Upcoming');
       } else if (route === 'budget/add-expense') {
         setActive('Budget');
+        setEditingTransactionId(null);
         setBudgetType('expense');
         setBudgetFormMode('transaction');
         setCategory('Other');
@@ -694,10 +696,17 @@ export default function App() {
           Alert.alert('Invalid amount', 'Enter an amount greater than zero.');
           return;
         }
-        await execute(
-          'INSERT INTO budget_transactions (title, amount, type, category, note) VALUES (?, ?, ?, ?, ?)',
-          [value, numericAmount, budgetType, category.trim() || 'Other', detail.trim()],
-        );
+        if (editingTransactionId) {
+          await execute(
+            'UPDATE budget_transactions SET title = ?, amount = ?, type = ?, category = ?, note = ? WHERE id = ?',
+            [value, numericAmount, budgetType, category.trim() || 'Other', detail.trim(), editingTransactionId],
+          );
+        } else {
+          await execute(
+            'INSERT INTO budget_transactions (title, amount, type, category, note) VALUES (?, ?, ?, ?, ?)',
+            [value, numericAmount, budgetType, category.trim() || 'Other', detail.trim()],
+          );
+        }
       } else {
         Alert.alert('Not available yet', 'This form is not available in this module yet.');
         return;
@@ -718,6 +727,7 @@ export default function App() {
       setNoteCategory('General');
       setNoteSubjectId('');
       setBudgetFormMode('transaction');
+      setEditingTransactionId(null);
       setShowForm(false);
       await refresh();
     } catch (error) {
@@ -906,6 +916,32 @@ export default function App() {
       }},
     ]);
   };
+  const openTransactionForm = (transaction, fallbackType = 'expense') => {
+    setActive('Budget');
+    setEditingTransactionId(transaction && transaction.id ? transaction.id : null);
+    setBudgetType(transaction ? transaction.type : fallbackType);
+    setBudgetFormMode('transaction');
+    setDraft(transaction ? transaction.title : '');
+    setAmount(transaction ? String(transaction.amount) : '');
+    setCategory(transaction ? (transaction.category || 'Other') : 'Other');
+    setDetail(transaction ? (transaction.note || '') : '');
+    setShowForm(true);
+  };
+
+  const removeTransaction = transaction => {
+    Alert.alert('Delete transaction?', 'Remove this ' + transaction.type + ' entry of ₱' + Number(transaction.amount).toFixed(2) + '? Your Budget totals and widgets will be updated.', [
+      {text: 'Cancel', style: 'cancel'},
+      {text: 'Delete', style: 'destructive', onPress: async () => {
+        try {
+          await execute('DELETE FROM budget_transactions WHERE id = ?', [transaction.id]);
+          await refresh();
+        } catch (error) {
+          Alert.alert('Could not delete transaction', String(error?.message || error));
+        }
+      }},
+    ]);
+  };
+
   const saveCategoryLimit = async () => {
     const value = Number(categoryLimitDraft);
     if (!Number.isFinite(value) || value <= 0) {
@@ -1652,12 +1688,23 @@ export default function App() {
           <SectionTitle title="Recent transactions" />
           <Card>
             {transactions.slice(0, 20).map(item => (
-              <View key={item.id} style={styles.listRow}>
-                <View style={{flex: 1}}>
-                  <Text style={styles.rowTitle}>{item.title}</Text>
-                  <Text style={styles.rowHint}>{item.category} · {item.type}</Text>
+              <View key={item.id} style={styles.transactionRow}>
+                <View style={styles.transactionMain}>
+                  <View style={{flex: 1}}>
+                    <Text style={styles.rowTitle}>{item.title}</Text>
+                    <Text style={styles.rowHint}>{item.category} · {item.type}</Text>
+                    {!!item.note ? <Text style={styles.transactionNote} numberOfLines={1}>{item.note}</Text> : null}
+                  </View>
+                  <Text style={[styles.rowTitle, {color: item.type === 'income' ? colors.primary : colors.text}]}>{item.type === 'income' ? '+' : '−'}₱{Number(item.amount).toFixed(2)}</Text>
                 </View>
-                <Text style={[styles.rowTitle, {color: item.type === 'income' ? colors.primary : colors.text}]}>{item.type === 'income' ? '+' : '−'}₱{Number(item.amount).toFixed(2)}</Text>
+                <View style={styles.transactionActions}>
+                  <Pressable onPress={() => openTransactionForm(item)} style={styles.transactionAction}>
+                    <Text style={styles.transactionActionText}>Edit</Text>
+                  </Pressable>
+                  <Pressable onPress={() => removeTransaction(item)} style={styles.transactionAction}>
+                    <Text style={styles.transactionDeleteText}>Delete</Text>
+                  </Pressable>
+                </View>
               </View>
             ))}
             {!transactions.length ? <Empty label="No income or expenses recorded yet." /> : null}
@@ -1665,18 +1712,8 @@ export default function App() {
         </View>
 
         <View style={styles.formActions}>
-          <Action label="＋ Add expense" onPress={() => {
-            setBudgetType('expense');
-            setBudgetFormMode('transaction');
-            setCategory('Other');
-            setShowForm(true);
-          }} />
-          <Action label="＋ Add income" secondary onPress={() => {
-            setBudgetType('income');
-            setBudgetFormMode('transaction');
-            setCategory('Other');
-            setShowForm(true);
-          }} />
+          <Action label="＋ Add expense" onPress={() => openTransactionForm(null, 'expense')} />
+          <Action label="＋ Add income" secondary onPress={() => openTransactionForm(null, 'income')} />
         </View>
       </>
     );
@@ -2056,7 +2093,7 @@ export default function App() {
       ) : showForm ? (
         <View style={styles.formOverlay}>
           <View style={styles.formCard}>
-            <Text style={styles.heading}>{active === 'Budget' ? (budgetFormMode === 'goal' ? 'New savings goal' : budgetFormMode === 'contribution' ? 'Add to savings' : budgetType === 'income' ? 'Add income' : 'Add expense') : active === 'Tasks' ? (editingTaskId ? 'Edit task' : 'New task') : active === 'Notepad' && editingNoteId ? 'Edit note' : 'New note'}</Text>
+            <Text style={styles.heading}>{active === 'Budget' ? (budgetFormMode === 'goal' ? 'New savings goal' : budgetFormMode === 'contribution' ? 'Add to savings' : editingTransactionId ? (budgetType === 'income' ? 'Edit income' : 'Edit expense') : budgetType === 'income' ? 'Add income' : 'Add expense') : active === 'Tasks' ? (editingTaskId ? 'Edit task' : 'New task') : active === 'Notepad' && editingNoteId ? 'Edit note' : 'New note'}</Text>
             {active !== 'Budget' || budgetFormMode === 'transaction' ? (
               <TextInput value={draft} onChangeText={setDraft} placeholder={active === 'Budget' ? 'Transaction name' : 'Title'} placeholderTextColor={colors.muted} style={styles.input} />
             ) : null}
@@ -2099,7 +2136,7 @@ export default function App() {
               <TextInput value={amount} onChangeText={setAmount} keyboardType="decimal-pad" placeholder="Amount (₱)" placeholderTextColor={colors.muted} style={styles.input} />
               <Text style={styles.fieldLabel}>CATEGORY</Text>
               <View style={styles.choiceRow}>
-                {(budgetType === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES).map(option => (
+                {[...new Set([...(budgetType === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES), category])].map(option => (
                   <Pressable key={option} onPress={() => setCategory(option)} style={[styles.choiceChip, category === option && styles.choiceChipSelected]}>
                     <Text style={[styles.choiceChipText, category === option && styles.choiceChipTextSelected]}>{option}</Text>
                   </Pressable>
@@ -2140,7 +2177,7 @@ export default function App() {
             ) : null}
             <View style={styles.formActions}>
               <Action label="Cancel" secondary onPress={() => setShowForm(false)} />
-              <Action label={active === 'Budget' ? budgetFormMode === 'goal' ? 'Create goal' : budgetFormMode === 'contribution' ? 'Add savings' : 'Save transaction' : active === 'Notepad' && editingNoteId ? 'Save changes' : 'Save'} onPress={active === 'Budget' ? budgetFormMode === 'goal' ? saveSavingsGoal : budgetFormMode === 'contribution' ? contributeToSavingsGoal : addItem : addItem} />
+              <Action label={active === 'Budget' ? budgetFormMode === 'goal' ? 'Create goal' : budgetFormMode === 'contribution' ? 'Add savings' : editingTransactionId ? 'Save changes' : 'Save transaction' : active === 'Notepad' && editingNoteId ? 'Save changes' : 'Save'} onPress={active === 'Budget' ? budgetFormMode === 'goal' ? saveSavingsGoal : budgetFormMode === 'contribution' ? contributeToSavingsGoal : addItem : addItem} />
             </View>
           </View>
         </View>
@@ -2363,6 +2400,13 @@ function makeStyles(c) {
     savingsGoalBottom: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'},
     savingsGoalProgress: {fontSize: 9, color: c.muted, fontWeight: '700'},
     savingsGoalAction: {fontSize: 10, color: c.primary, fontWeight: '900'},
+    transactionRow: {paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border, gap: 6},
+    transactionMain: {flexDirection: 'row', alignItems: 'center', gap: 10},
+    transactionNote: {fontSize: 9, color: c.muted, marginTop: 3},
+    transactionActions: {flexDirection: 'row', justifyContent: 'flex-end', gap: 12},
+    transactionAction: {paddingHorizontal: 9, paddingVertical: 5, borderRadius: 8, backgroundColor: c.background, borderWidth: 1, borderColor: c.border},
+    transactionActionText: {fontSize: 9, fontWeight: '800', color: c.primary},
+    transactionDeleteText: {fontSize: 9, fontWeight: '800', color: '#A64D3B'},
     noteHero: {backgroundColor: c.primary, borderRadius: 23, padding: 18, gap: 13},
     noteHeroTop: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'},
     noteHeroEyebrow: {fontSize: 9, color: '#E4EDE1', letterSpacing: 1.4, fontWeight: '800'},

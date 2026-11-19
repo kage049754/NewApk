@@ -22,7 +22,8 @@
 - [x] Implement personal activity and appointment create/edit/delete with date/time, notes and a Home dashboard preview.
 - [x] Complete task editing, checklists and optional task-to-Notepad linking.
 - [x] Implement category spending analytics, monthly category limits and savings-goal tracking.
-- [ ] Add budget transaction editing/deletion, reports and category-limit rollover.
+- [x] Add budget transaction editing and deletion with dashboard/widget refresh.
+- [ ] Add exportable budget reports and category-limit rollover.
 - [x] Add the offline lecture-file library, subject/category grouping, Android document picker, private file copies and external-app opening (CI/runtime verification pending).
 - [x] Implement cross-module dashboard refresh and local widget synchronization after planner data changes.
 - [ ] Complete dashboard summaries and profile personalization.

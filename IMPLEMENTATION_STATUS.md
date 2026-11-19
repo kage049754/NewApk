@@ -145,3 +145,10 @@ Implement local reminder scheduling for classes, tasks and personal activities (
 ## Reminder build verification
 - GitHub Actions run #30 for commit `f119dc4c0c1e254aec10753d58ac7aabb790dbdf` completed successfully. Android debug APK compilation and artifact upload passed.
 - Runtime notification delivery, alarm tone, snooze/dismiss and reboot recovery still require emulator/physical-device testing.
+
+
+## Budget transaction maintenance
+- Added editing for existing income and expense entries, including title, amount, category and note.
+- Added confirmation-based deletion. After either operation, Budget totals, category summaries and widgets refresh from SQLite.
+- Existing custom transaction categories remain available in the edit form; the income/expense type is retained.
+- Transaction update/delete build verification is pending.
