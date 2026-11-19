@@ -190,7 +190,7 @@ export async function createPlannerBackup() {
   };
 }
 
-export async function restorePlannerBackup(data, importedLectureFiles = []) {
+export async function restorePlannerBackup(data, importedLectureFiles = [], replaceLectureFiles = false) {
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
     throw new Error('The backup data section is invalid.');
   }
@@ -234,8 +234,13 @@ export async function restorePlannerBackup(data, importedLectureFiles = []) {
   ];
 
   await db.transaction(async tx => {
-    // Keep imported files on this device, but detach their old subject IDs before replacing subjects.
-    await tx.executeSql('UPDATE lecture_files SET subject_id = NULL;');
+    // Legacy CampusOS imports preserve existing NewApk files. NewApk v2 restore
+    // replaces file metadata atomically with the rest of the planner backup.
+    if (replaceLectureFiles) {
+      await tx.executeSql('DELETE FROM lecture_files;');
+    } else {
+      await tx.executeSql('UPDATE lecture_files SET subject_id = NULL;');
+    }
     for (const table of deleteOrder) {
       await tx.executeSql('DELETE FROM ' + table + ';');
     }

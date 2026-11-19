@@ -279,6 +279,39 @@ class LectureFilesModule(
     }
 
     @ReactMethod
+    fun exportBase64Files(payload: String, promise: Promise) {
+        try {
+            val entries = org.json.JSONArray(payload)
+            if (entries.length() > 500) throw IllegalArgumentException("A maximum of 500 Lecture Files can be included in one backup.")
+            val result = Arguments.createArray()
+            var totalBytes = 0L
+            for (index in 0 until entries.length()) {
+                val entry = entries.optJSONObject(index) ?: throw IllegalArgumentException("A Lecture File backup entry is invalid.")
+                val file = validatedPrivateFile(entry.optString("stored_path"))
+                if (!file.exists() || !file.isFile) throw IllegalStateException("A saved Lecture File is missing: " + entry.optString("name"))
+                totalBytes += file.length()
+                if (totalBytes > 12L * 1024L * 1024L) {
+                    throw IllegalArgumentException("Lecture File contents exceed the 12 MB backup limit. Export a smaller set of files.")
+                }
+                val bytes = file.readBytes()
+                val mapped = Arguments.createMap().apply {
+                    putString("name", entry.optString("name", file.name))
+                    putString("mimeType", entry.optString("mime_type", "application/octet-stream"))
+                    putString("category", entry.optString("category", "Lecture"))
+                    val subjectId = entry.optLong("subject_id", 0L)
+                    if (subjectId > 0L) putDouble("subjectId", subjectId.toDouble()) else putNull("subjectId")
+                    putDouble("sizeBytes", bytes.size.toDouble())
+                    putString("data", Base64.encodeToString(bytes, Base64.NO_WRAP))
+                }
+                result.pushMap(mapped)
+            }
+            promise.resolve(result)
+        } catch (error: Exception) {
+            promise.reject("E_LECTURE_BACKUP", error.message ?: "Could not include Lecture Files in the backup.", error)
+        }
+    }
+
+    @ReactMethod
     fun deleteImportedFiles(pathsJson: String, promise: Promise) {
         try {
             val paths = org.json.JSONArray(pathsJson)

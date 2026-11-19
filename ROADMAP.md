@@ -35,7 +35,9 @@
 - [x] Implement persistent Forest, Sunset, Monochrome and Night appearance presets.
 - [x] Add editable custom color combinations for backgrounds, cards, primary/accent, text and borders.
 - [x] Add offline JSON backup and validated restore to Settings.
-- [ ] Complete the remaining settings modules, including profile, storage information and backup of actual Lecture File contents.
+- [ ] Add a storage information panel with database/file totals and local cleanup guidance.
+- [x] Include actual Lecture File contents in NewApk JSON backup v2 with backward-compatible v1 restore.
+- [x] Add local profile-name personalization.
 - [x] Implement module-aware JSON backup/export and validated restore/import (Lecture File contents remain device-local).
 - [x] Add validated CampusOS Backup v1/v2 migration for full Homepage, Schedule, Tasks and Academics exports, including subject-linked notes and Base64 lecture files (up to 12 MB total).
 - [ ] Add automated unit and UI tests.

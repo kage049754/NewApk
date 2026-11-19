@@ -191,3 +191,12 @@ Implement local reminder scheduling for classes, tasks and personal activities (
 - Compatible profile-name and appearance settings are mapped. CampusOS app-lock PINs, profile photos, home-layout configuration and detailed timetable appearance settings are not imported.
 - Added Jest tests for data mapping, malformed JSON, partial backups, invalid timetable rows and attachment size limits. GitHub Actions now runs these tests before Android compilation.
 - Profile personalization build #39 for commit `853710217046fa69ad0648dfc71dc8ccad5071e2` succeeded; the migration commit requires a fresh test and Android build result.
+
+
+## Lecture File contents in NewApk backups
+- NewApk JSON backup version 2 includes the actual Base64 contents of private Lecture Files, including their names, MIME types, categories and subject associations.
+- Limits: 500 files and 12 MB total decoded attachment data. Missing files or over-limit backups fail before the JSON backup is saved.
+- NewApk v2 restore imports attachments into private storage first, then replaces planner records and file metadata in one SQLite transaction. If the database restore fails, newly copied files are deleted; after success, previous file copies are removed.
+- NewApk v1 backups remain supported and preserve existing on-device Lecture Files because those older backups contain only file metadata.
+- CampusOS legacy imports continue to preserve existing NewApk Lecture Files while adding the imported CampusOS attachments.
+- Android and backup-format verification for this change is pending.

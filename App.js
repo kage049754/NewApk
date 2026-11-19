@@ -577,6 +577,18 @@ export default function App() {
     setBackupBusy(true);
     try {
       const payload = await createPlannerBackup();
+      const fileRows = await query(
+        'SELECT name, stored_path, mime_type, size_bytes, subject_id, category FROM lecture_files ORDER BY imported_at DESC, id DESC',
+      );
+      if (fileRows.length) {
+        if (!NativeModules.LectureFiles?.exportBase64Files) {
+          throw new Error('Lecture File backup is not available in this Android build.');
+        }
+        payload.lectureFiles = await NativeModules.LectureFiles.exportBase64Files(JSON.stringify(fileRows));
+      } else {
+        payload.lectureFiles = [];
+      }
+      payload.version = 2;
       const savedUri = await NativeModules.LocalBackup.saveBackup(JSON.stringify(payload));
       if (savedUri) {
         Alert.alert('Backup saved', 'Your NewApk planner data was saved as a JSON backup. Keep this file somewhere safe.');
@@ -605,8 +617,12 @@ export default function App() {
         Alert.alert('Invalid backup file', 'This file is not valid JSON.');
         return;
       }
-      if (!backup || backup.format !== 'newapk-backup' || backup.version !== 1 || !backup.data) {
-        Alert.alert('Unsupported backup', 'Choose a NewApk JSON backup created by this app.');
+      if (!backup || backup.format !== 'newapk-backup' || ![1, 2].includes(Number(backup.version)) || !backup.data) {
+        Alert.alert('Unsupported backup', 'Choose a supported NewApk JSON backup created by this app.');
+        return;
+      }
+      if (Number(backup.version) >= 2 && !Array.isArray(backup.lectureFiles)) {
+        Alert.alert('Incomplete backup', 'The backup is missing the Lecture Files section.');
         return;
       }
       const requiredTables = ['subjects', 'classes', 'notes', 'tasks', 'activities', 'budget_transactions', 'monthly_budgets', 'category_budgets', 'savings_goals', 'settings'];
@@ -616,16 +632,43 @@ export default function App() {
         return;
       }
       const totalRecords = requiredTables.reduce((sum, table) => sum + backup.data[table].length, 0);
-      const lectureCount = Array.isArray(backup.lectureFilesManifest) ? backup.lectureFilesManifest.length : 0;
+      const lectureCount = Number(backup.version) >= 2
+        ? backup.lectureFiles.length
+        : (Array.isArray(backup.lectureFilesManifest) ? backup.lectureFilesManifest.length : 0);
       Alert.alert(
         'Replace current planner data?',
-        'Restore ' + totalRecords + ' records from this backup? Existing planner records will be replaced. Imported Lecture Files stay on this device and are not included in the JSON file; their subject links will be cleared.',
+        'Restore ' + totalRecords + ' planner records and ' + lectureCount + ' Lecture Files? A version 2 backup includes actual file contents (12 MB total limit). Existing planner records and Lecture Files will be replaced by this backup.',
         [
           {text: 'Cancel', style: 'cancel'},
           {text: 'Restore backup', style: 'destructive', onPress: async () => {
             setBackupBusy(true);
             try {
-              const restoredCount = await restorePlannerBackup(backup.data);
+              const oldLectureFiles = Number(backup.version) >= 2
+                ? await query('SELECT stored_path FROM lecture_files')
+                : [];
+              let importedFiles = [];
+              if (Number(backup.version) >= 2 && backup.lectureFiles.length) {
+                if (!NativeModules.LectureFiles?.importBase64Files) {
+                  throw new Error('Lecture File restore is not available in this Android build.');
+                }
+                importedFiles = await NativeModules.LectureFiles.importBase64Files(JSON.stringify(backup.lectureFiles));
+              }
+              let restoredCount;
+              try {
+                restoredCount = await restorePlannerBackup(
+                  backup.data,
+                  importedFiles,
+                  Number(backup.version) >= 2,
+                );
+              } catch (restoreError) {
+                if (importedFiles.length && NativeModules.LectureFiles?.deleteImportedFiles) {
+                  try { await NativeModules.LectureFiles.deleteImportedFiles(JSON.stringify(importedFiles.map(file => file.path))); } catch (_) {}
+                }
+                throw restoreError;
+              }
+              if (oldLectureFiles.length && NativeModules.LectureFiles?.deleteImportedFiles) {
+                try { await NativeModules.LectureFiles.deleteImportedFiles(JSON.stringify(oldLectureFiles.map(file => file.stored_path))); } catch (_) {}
+              }
               const appearanceRows = await query(
                 'SELECT key, value FROM settings WHERE key IN (?, ?)',
                 ['appearance_palette', 'appearance_custom_palette'],
@@ -649,7 +692,7 @@ export default function App() {
                 setPaletteName('Forest');
               }
               await refresh();
-              Alert.alert('Restore complete', restoredCount + ' planner records were restored. ' + lectureCount + ' Lecture Files remain stored locally on this device.');
+              Alert.alert('Restore complete', restoredCount + ' planner records and ' + (Number(backup.version) >= 2 ? importedFiles.length : 'existing') + ' Lecture Files were restored.');
             } catch (error) {
               Alert.alert('Restore failed', 'Your current data was not fully replaced. ' + String(error?.message || error));
             } finally {
@@ -2328,7 +2371,7 @@ export default function App() {
             <Action label="Restore NewApk backup" secondary onPress={importPlannerData} />
           </View>
           <Action label="Import CampusOS backup" secondary onPress={importCampusOsBackup} />
-          <Text style={styles.formSubtitle}>NewApk JSON backups keep Lecture File bytes on this device. CampusOS full backups can transfer supported files (up to 12 MB total) into this library.</Text>
+          <Text style={styles.formSubtitle}>NewApk backups include actual Lecture File contents (up to 12 MB total). CampusOS backups can also transfer supported subject files into this library.</Text>
         </Card>
         <Card><Heading>Data and privacy</Heading><Text style={styles.bodyText}>Your planner data is stored locally on this device. NewApk does not require an account or cloud database.</Text></Card>
         <Card><Heading>About NewApk</Heading><Text style={styles.bodyText}>React Native student productivity app · Offline-first</Text></Card>
