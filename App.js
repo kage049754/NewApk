@@ -447,7 +447,7 @@ export default function App() {
   useEffect(() => {
     const openWidgetDestination = url => {
       if (!url || !String(url).startsWith('newapk://')) return;
-      const route = String(url).slice('newapk://'.length).split('?')[0].replace(/^\\/+|\\/+$/g, '');
+      const route = String(url).slice('newapk://'.length).split('?')[0];
       setShowActivityForm(false);
       setShowForm(false);
       if (route === 'schedule' || route === 'schedule/today') {

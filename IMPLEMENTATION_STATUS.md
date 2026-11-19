@@ -207,3 +207,9 @@ Implement local reminder scheduling for classes, tasks and personal activities (
 - Added a signed QA release variant using the generated Android debug key (not a production signing key) so the React Native release bundle is embedded and the APK can be installed without Metro.
 - GitHub Actions now builds both the Metro-connected debug APK and the standalone QA APK, checks for the embedded JS bundle, verifies the APK signature with `apksigner`, and uploads them as separate artifacts.
 - The standalone QA packaging change requires a new CI result. It is not a production-signed release.
+
+
+## Standalone QA APK build diagnostics
+- Run #42 passed the migration tests and built the Metro-connected debug APK. The standalone release JS bundle step then caught an invalid escaped slash regex in the widget deep-link handler at `App.js:450`.
+- Replaced the unnecessary regex cleanup with direct URL route extraction; the native widget routes do not append a trailing slash.
+- Release bundle, APK signature and standalone artifact verification are pending on the next workflow run.
