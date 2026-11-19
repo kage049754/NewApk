@@ -125,3 +125,7 @@ Implement local reminder scheduling for classes, tasks and personal activities (
 - GitHub Actions run #31 for commit `cef9c102efd420d3640dc04743cce9cd1830634e` failed at Android resource compilation (`:app:mergeDebugResources`).
 - The log identified invalid Android string-resource parsing for apostrophes in the widget label and budget description; dependency installation succeeded, but no APK was produced.
 - Reworded those two resources without apostrophes. The corrected widget build is pending.
+
+
+- The first widget build failure was corrected by rewriting apostrophes in Android string resources; run #32 then passed resource merging.
+- Run #32 for commit `d890723eedbb475648298305a8eb093f11a2967e` then failed at Kotlin compilation because public widget providers extended an internal base class. The base provider is now public; a new build is pending.

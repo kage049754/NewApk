@@ -218,7 +218,7 @@ internal object PlannerWidgetRenderer {
     private val DAYS=listOf("Sun","Mon","Tue","Wed","Thu","Fri","Sat")
 }
 
-internal abstract class BasePlannerWidgetProvider:AppWidgetProvider() {
+abstract class BasePlannerWidgetProvider:AppWidgetProvider() {
     abstract val widgetType:String
     override fun onUpdate(context:Context,manager:AppWidgetManager,ids:IntArray) {
         PlannerWidgetRenderer.update(context,manager,widgetType,ids)
