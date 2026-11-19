@@ -42,10 +42,56 @@ SCREEN_CENTER_X=$((SCREEN_WIDTH / 2))
 SCROLL_START_Y=$((SCREEN_HEIGHT * 80 / 100))
 SCROLL_END_Y=$((SCREEN_HEIGHT * 35 / 100))
 
+dismiss_launcher_anr() {
+  local coordinates
+  coordinates="$(python3 - "$REPORT_DIR/window.xml" <<'PY'
+import re
+import sys
+import xml.etree.ElementTree as ET
+
+path = sys.argv[1]
+root = ET.parse(path).getroot()
+for node in root.iter():
+    if node.attrib.get("text") != "Wait" and node.attrib.get("resource-id") != "android:id/aerr_wait":
+        continue
+    match = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", node.attrib.get("bounds", ""))
+    if not match:
+        continue
+    x1, y1, x2, y2 = map(int, match.groups())
+    print((x1 + x2) // 2, (y1 + y2) // 2)
+    raise SystemExit(0)
+raise SystemExit("Launcher ANR dialog has no visible Wait control.")
+PY
+)" || return 1
+  local x y
+  read -r x y <<< "$coordinates"
+  echo "EMULATOR: dismissing transient Pixel Launcher ANR with Wait at ($x,$y)." | tee -a "$REPORT_DIR/tap-events.txt"
+  adb shell input tap "$x" "$y"
+}
+
 dump_ui() {
-  timeout 12s adb shell uiautomator dump --compressed /sdcard/newapk-window.xml >/dev/null 2>&1 || return 1
-  adb pull /sdcard/newapk-window.xml "$REPORT_DIR/window.xml" >/dev/null 2>&1 || return 1
-  [[ -s "$REPORT_DIR/window.xml" ]]
+  # Pixel Launcher can briefly ANR during first install / package indexing.
+  # Keep waiting on the launcher rather than letting its modal hide NewApk UI.
+  for attempt in $(seq 1 8); do
+    timeout 12s adb shell uiautomator dump --compressed /sdcard/newapk-window.xml >/dev/null 2>&1 || {
+      sleep 1
+      continue
+    }
+    adb pull /sdcard/newapk-window.xml "$REPORT_DIR/window.xml" >/dev/null 2>&1 || {
+      sleep 1
+      continue
+    }
+    [[ -s "$REPORT_DIR/window.xml" ]] || continue
+    if grep -Fq "Pixel Launcher isn't responding" "$REPORT_DIR/window.xml"; then
+      dismiss_launcher_anr || return 1
+      sleep 2
+      continue
+    fi
+    return 0
+  done
+  echo "Android UI remained blocked by a system dialog after repeated Wait attempts." >&2
+  [[ -s "$REPORT_DIR/window.xml" ]] && cat "$REPORT_DIR/window.xml" >&2
+  return 1
 }
 
 ui_has_text() {
@@ -71,11 +117,7 @@ ui_wait_text() {
   if [[ "$#" -gt 1 ]]; then attempts="$2"; fi
   for attempt in $(seq 1 "$attempts"); do
     if dump_ui; then
-      if ui_has_text "Pixel Launcher isn't responding"; then
-        # Ask Android to wait for a transient launcher ANR, then retry the app assertion.
-        ui_click_text "Wait" bottom || true
-        sleep 2
-      elif ui_has_text "$needle"; then
+      if ui_has_text "$needle"; then
         return 0
       fi
     fi
@@ -90,6 +132,7 @@ ui_click_text() {
   local needle="$1"
   local preference=first
   if [[ "$#" -gt 1 ]]; then preference="$2"; fi
+  dump_ui || return 1
   local coordinates
   coordinates="$(python3 - "$REPORT_DIR/window.xml" "$needle" "$preference" <<'PY'
 import re
@@ -128,6 +171,7 @@ PY
 }
 ui_click_input_hint() {
   local hint="$1"
+  dump_ui || return 1
   local coordinates
   coordinates="$(python3 - "$REPORT_DIR/window.xml" "$hint" <<'PY'
 import re
