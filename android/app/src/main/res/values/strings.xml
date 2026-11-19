@@ -1,6 +1,6 @@
 <resources>
     <string name="app_name">NewApk</string>
-    <string name="widget_today_classes">Today&#39;s Classes</string>
+    <string name="widget_today_classes">Classes Today</string>
     <string name="widget_weekly_schedule">Weekly Schedule</string>
     <string name="widget_upcoming_tasks">Upcoming Tasks</string>
     <string name="widget_deadline_overview">Deadline Overview</string>
@@ -11,7 +11,7 @@
     <string name="widget_weekly_schedule_description">See the next classes in your weekly timetable.</string>
     <string name="widget_upcoming_tasks_description">See tasks that still need to be completed.</string>
     <string name="widget_deadline_overview_description">Keep upcoming task deadlines in view.</string>
-    <string name="widget_budget_overview_description">See this month&#39;s income, expenses and balance.</string>
+    <string name="widget_budget_overview_description">See income, expenses and balance for this month.</string>
     <string name="widget_savings_goals_description">Track your savings goal progress.</string>
     <string name="widget_quick_expense_description">Open the Budget expense form to record an expense.</string>
 </resources>

@@ -119,3 +119,9 @@ Implement local reminder scheduling for classes, tasks and personal activities (
 - Added widget deep links into Schedule, Tasks and Budget. Quick Expense opens the Budget expense form directly.
 - No backend or internet dependency is used. Installation, launcher rendering, resizing, live refresh and Quick Expense handoff still require emulator/physical-device testing.
 - Android CI build verification for this widget implementation is pending.
+
+
+## Widget build failure and correction
+- GitHub Actions run #31 for commit `cef9c102efd420d3640dc04743cce9cd1830634e` failed at Android resource compilation (`:app:mergeDebugResources`).
+- The log identified invalid Android string-resource parsing for apostrophes in the widget label and budget description; dependency installation succeeded, but no APK was produced.
+- Reworded those two resources without apostrophes. The corrected widget build is pending.
