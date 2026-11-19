@@ -45,9 +45,10 @@
 - [x] Add validated CampusOS Backup v1/v2 migration for full Homepage, Schedule, Tasks and Academics exports, including subject-linked notes and Base64 lecture files (up to 12 MB total).
 - [x] Add Jest unit tests for CampusOS backup conversion, malformed/partial input, timetable row validation and lecture attachment size limits.
 - [x] Add Jest tests for Home task week boundaries, overdue separation, date validation and combined savings progress.
-- [ ] Expand automated unit and UI test coverage beyond the CampusOS migration and Home dashboard calculation suites.
+- [x] Expand automated unit and UI test coverage with SQLite initialization/restore tests and an offline emulator flow for task persistence and primary-module navigation.
 - [x] Verify standalone QA APK installation, offline startup and Home-screen rendering in an Android API 35 x86_64 emulator.
-- [ ] Verify data persistence across app relaunch, cross-module navigation, notification delivery and alarm behavior in emulator/device testing.
+- [x] Verify local task creation, persistence across app force-stop/relaunch, and primary-module navigation (Home, Schedule, Tasks, Budget, Notepad, Files and Settings) in the API 35 x86_64 emulator.
+- [ ] Verify notification delivery, alarm sound/vibration, snooze/dismiss, reboot recovery and device-specific battery behavior on emulator/physical device.
 - [ ] Prepare release APK and document physical-device testing separately.
 
 
@@ -68,3 +69,15 @@
 - Standalone QA artifact ID: `14562040058`; extracted APK size: 48,061,149 bytes; embedded `assets/index.android.bundle`: 994,816 bytes; `classes.dex` and Hermes/React Native native libraries are present.
 - Standalone QA APK SHA-256: `a2fcb4ade6e3eeefa7223caa8b39919584bacbff391a394f6219da8d31b423cf`. APK ZIP integrity passed and CI signature verification passed.
 - This is an emulator startup/UI smoke test, not a complete feature test. Persistent data across relaunch, module navigation, notification delivery, widgets and the physical Infinix device remain unverified. The QA APK is signed with the generated Android debug key, not a production key.
+
+
+## Offline persistence and module-navigation emulator verification
+- [x] Extend the standalone APK smoke test to create a planner task, relaunch the app process, confirm the saved task remains, navigate all primary modules and return to Home.
+- [x] Harden the test harness against a transient Android Pixel Launcher ANR dialog. It now repeatedly uses the system "Wait" action before UI dumps, taps and text-input interaction, and uses the previously successful Pixel 7 Pro API 35 profile.
+- GitHub Actions run #70 for commit `fae4ba58f4c8bced265632a382746b36ad17c64f` completed successfully. All 16 Jest tests across 3 suites passed; debug and standalone QA APK builds, embedded React Native bundle verification, CI APK signature verification and artifact uploads passed.
+- The offline API 35 x86_64 Pixel 7 Pro emulator installed and launched the standalone APK with Wi-Fi/mobile data disabled. It created `NewApkCiSmokeTask`, force-stopped and relaunched NewApk, and confirmed the task survived.
+- Automated navigation passed for Schedule, Tasks, Budget, Notepad, Lecture Files and Settings, followed by a return to Home. Home showed the expected `1 tasks to finish` count. The final screenshot was visually inspected. No Pixel Launcher ANR remained in the captured logcat, no fatal Android/React Native errors were logged, and `logcat-errors.txt` is empty.
+- Emulator evidence artifact: `NewApk-emulator-smoke`, ID `14570290787`.
+- Standalone QA artifact: ID `14567957802`; archive size 19,384,500 bytes. Extracted APK size 48,061,233 bytes; `classes.dex` and embedded `assets/index.android.bundle` (994,940 bytes) are present; APK ZIP integrity passed and CI signature verification passed.
+- Standalone QA APK SHA-256: `cca599bbea22da9162a2f70341e84f61fec97ea443cc032188f32fff49c55a24`.
+- The QA APK uses the generated Android debug key, not a production signing key. Notification/alarm delivery, widgets, actual physical Infinix behavior and production signing are still outstanding.
