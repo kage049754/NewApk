@@ -30,6 +30,7 @@
 - [x] Add optional local profile-name personalization to the Home greeting and avatar.
 - [x] Add weekly due/overdue task and savings-goal snapshots to the Home dashboard.
 - [x] Highlight the in-progress or next scheduled class on Home with a direct link to the current Day view.
+- [x] Refine Home task deadline labels/counts and show individual savings-goal progress bars.
 - [x] Implement local notifications, class/task/activity reminders, sound/vibration, snooze/dismiss, boot/time-change rescheduling and exact-alarm access.
 - [ ] Test actual notification delivery, alarm sound/vibration, snooze/dismiss, reboot recovery and device-specific battery behavior.
 - [x] Implement seven Android home-screen widgets: Today&#39;s Classes, Weekly Schedule, Upcoming Tasks, Deadline Overview, Budget Overview, Savings Goals and Quick Expense.

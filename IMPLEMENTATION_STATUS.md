@@ -264,3 +264,13 @@ Implement local reminder scheduling for classes, tasks and personal activities (
 - Downloaded standalone QA artifact `NewApk-standalone-qa` (artifact ID `14554540447`; ZIP size 19,383,770 bytes). ZIP and APK archive integrity passed; APK size is 48,061,333 bytes and contains `classes.dex` plus `assets/index.android.bundle` (995,080 bytes).
 - Standalone QA APK SHA-256: `7a48eec17b60e59c823468b7cb855681c762a5c59d6f1012daf2209026fbc43b`.
 - CI signature verification passed. This is a QA APK signed with the generated Android debug key, not a production-signed release. The Home-to-Schedule tap and live current/next-class state still require emulator or physical-device runtime testing.
+
+
+## Home dashboard deadline and savings UI refinement
+- Renamed the Home card from "Weekly task progress" to "Task deadlines" because it reports deadline counts rather than completed-task progress.
+- Corrected the supporting task count to exclude both tasks due this week and overdue tasks; the remaining count now describes only tasks due later or without a due date.
+- Added a compact progress bar to each of the first two savings-goal rows, in addition to the combined savings bar.
+- GitHub Actions run #57 for commit `2350aee1d44cfd009049e2505d1320d6ad3aba3f` passed all 13 unit tests, debug and standalone QA APK builds, embedded bundle/signature verification, both artifact uploads and runner cleanup.
+- Downloaded standalone QA artifact `NewApk-standalone-qa` (artifact ID `14554762488`; ZIP size 19,383,804 bytes). ZIP and APK archive integrity passed. The extracted APK is 48,061,437 bytes, contains `classes.dex` and `assets/index.android.bundle` (995,256 bytes).
+- Standalone QA APK SHA-256: `46bb31aab79a542d76185637dd29aed733f9a40b33615d9c4826c77b92a5f723`.
+- CI signature verification passed. This is a QA build signed using the generated Android debug key, not a production-signed release. Emulator and physical-device UI/runtime testing remain pending.
