@@ -65,7 +65,7 @@ function parseLocalDateTime(value, fallbackTime = '00:00') {
 function toReminderWallTime(date) {
   const pad = value => String(value).padStart(2, '0');
   return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate())
-    + ' ' + pad(date.getHours()) + ':' + pad(date.getMinutes());
+    + ' ' + pad(date.getHours()) + ':' + pad(date.getMinutes()) + ':' + pad(date.getSeconds());
 }
 
 function makeReminderRecord(id, title, body, when, repeatWeekly, settings) {

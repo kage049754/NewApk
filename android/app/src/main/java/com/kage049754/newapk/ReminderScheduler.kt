@@ -14,6 +14,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import org.json.JSONArray
 import org.json.JSONObject
+import java.text.ParsePosition
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -228,19 +229,24 @@ internal object ReminderScheduler {
     }
 
     private fun parseWallTime(value: String): Date? {
-        return try {
-            val formatter = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).apply {
+        // New records preserve seconds; older stored reminders used minute precision.
+        val patterns = listOf("yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd HH:mm")
+        patterns.forEach { pattern ->
+            val formatter = SimpleDateFormat(pattern, Locale.US).apply {
                 isLenient = false
                 timeZone = TimeZone.getDefault()
             }
-            formatter.parse(value)
-        } catch (_: Exception) {
-            null
+            val position = ParsePosition(0)
+            val parsed = formatter.parse(value, position)
+            if (parsed != null && position.index == value.length && position.errorIndex < 0) {
+                return parsed
+            }
         }
+        return null
     }
 
     private fun formatWallTime(date: Date): String {
-        return SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).apply {
+        return SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).apply {
             timeZone = TimeZone.getDefault()
         }.format(date)
     }
