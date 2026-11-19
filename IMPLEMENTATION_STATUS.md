@@ -213,3 +213,13 @@ Implement local reminder scheduling for classes, tasks and personal activities (
 - Run #42 passed the migration tests and built the Metro-connected debug APK. The standalone release JS bundle step then caught an invalid escaped slash regex in the widget deep-link handler at `App.js:450`.
 - Replaced the unnecessary regex cleanup with direct URL route extraction; the native widget routes do not append a trailing slash.
 - Release bundle, APK signature and standalone artifact verification are pending on the next workflow run.
+
+
+## Storage panel and standalone QA APK verification
+- Added a live Settings storage panel with SQLite page-allocation estimate, combined planner record count, and Lecture Files count/size. The database estimate uses SQLite page count × page size and explicitly warns that temporary journal files may not be included.
+- Storage details refresh together with the existing local data refresh. Cleanup guidance recommends removing unneeded Lecture Files only after exporting a backup and warns that Android Clear storage / Clear data erases local planner data.
+- GitHub Actions run #43 for commit `f55fefb4dcce9cc5754653ed13b7575f9ba42fd6` completed successfully. It built the debug and standalone QA APKs, verified the embedded React Native bundle and APK signature, and uploaded both artifacts.
+- The storage-panel change in commit `258814c5951c352d73047392205a247eea62a4de` passed GitHub Actions run #44. Migration tests, debug and standalone builds, embedded-bundle verification, signature verification, artifact uploads and runner cleanup all succeeded.
+- Downloaded standalone QA artifact `NewApk-standalone-qa` (artifact ID `14538210894`; ZIP artifact size 19,378,546 bytes). The extracted APK is 48,056,157 bytes; its React Native bundle is present at `assets/index.android.bundle` (985,048 bytes). Both the artifact ZIP and APK passed local archive-integrity checks.
+- Standalone APK SHA-256: `717c9f29f724f4349013b3aa3e84a72d63fac4d8109764dd55e0fa748956aa25`.
+- GitHub's `Verify standalone APK bundle and signature` step passed. This is a CI-signed QA build using the generated Android debug key, not a production-signed release. Emulator launch, data persistence and physical-device testing remain pending.
