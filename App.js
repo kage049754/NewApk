@@ -1,6 +1,6 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import {
-  ActivityIndicator, Alert, SafeAreaView, ScrollView, StatusBar,
+  ActivityIndicator, Alert, NativeModules, SafeAreaView, ScrollView, StatusBar,
   StyleSheet, Text, TextInput, Pressable, View,
 } from 'react-native';
 import {execute, getDashboardSummary, openDatabase, query} from './src/data/database';
@@ -31,6 +31,21 @@ function formatDate(value) {
   const parsed = new Date(String(value).replace(' ', 'T'));
   if (Number.isNaN(parsed.getTime())) return String(value);
   return MONTHS[parsed.getMonth()] + ' ' + parsed.getDate();
+}
+
+function formatFileSize(bytes) {
+  const size = Number(bytes) || 0;
+  if (size < 1024) return size + ' B';
+  if (size < 1024 * 1024) return (size / 1024).toFixed(1) + ' KB';
+  return (size / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function fileKind(mimeType, name) {
+  const mime = String(mimeType || '').toLowerCase();
+  const lowerName = String(name || '').toLowerCase();
+  if (mime === 'application/pdf' || lowerName.endsWith('.pdf')) return 'PDF';
+  if (mime.startsWith('image/')) return 'Image';
+  return 'Document';
 }
 
 function greetingForHour(hour) {
@@ -82,6 +97,12 @@ export default function App() {
   const [taskFilter, setTaskFilter] = useState('All');
   const [taskSearch, setTaskSearch] = useState('');
   const [notes, setNotes] = useState([]);
+  const [lectureFiles, setLectureFiles] = useState([]);
+  const [fileSubjectFilter, setFileSubjectFilter] = useState('All');
+  const [fileTypeFilter, setFileTypeFilter] = useState('All');
+  const [fileSearch, setFileSearch] = useState('');
+  const [fileImportSubjectId, setFileImportSubjectId] = useState('');
+  const [fileCategoryDraft, setFileCategoryDraft] = useState('Lecture');
   const [activities, setActivities] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [monthlyLimit, setMonthlyLimit] = useState(0);
@@ -106,11 +127,12 @@ export default function App() {
 
   const refresh = async () => {
     const dayOfWeek = new Date().getDay(); // Schedule convention: Sunday=0 through Saturday=6.
-    const [stats, subjectRows, taskRows, noteRows, classRows, activityRows, transactionRows, limitRows, categoryBudgetRows, savingsGoalRows] = await Promise.all([
+    const [stats, subjectRows, taskRows, noteRows, fileRows, classRows, activityRows, transactionRows, limitRows, categoryBudgetRows, savingsGoalRows] = await Promise.all([
       getDashboardSummary(),
       query('SELECT * FROM subjects ORDER BY name'),
       query("SELECT * FROM tasks ORDER BY completed, CASE WHEN due_at IS NULL THEN 1 ELSE 0 END, due_at ASC, CASE priority WHEN 'High' THEN 0 WHEN 'Medium' THEN 1 ELSE 2 END, id DESC"),
       query('SELECT * FROM notes ORDER BY pinned DESC, id DESC'),
+      query('SELECT lecture_files.*, subjects.name AS subject_name, subjects.code AS subject_code FROM lecture_files LEFT JOIN subjects ON subjects.id = lecture_files.subject_id ORDER BY lecture_files.imported_at DESC, lecture_files.id DESC'),
       query('SELECT classes.*, subjects.name AS subject_name, subjects.code AS subject_code, subjects.color AS subject_color, subjects.room AS subject_room FROM classes LEFT JOIN subjects ON subjects.id = classes.subject_id ORDER BY classes.day_of_week, classes.start_time'),
       query('SELECT * FROM activities WHERE starts_at IS NOT NULL ORDER BY starts_at ASC LIMIT 5'),
       query("SELECT * FROM budget_transactions WHERE strftime('%Y-%m', occurred_at, 'localtime') = strftime('%Y-%m', 'now', 'localtime') ORDER BY occurred_at DESC, id DESC"),
@@ -122,6 +144,7 @@ export default function App() {
     setSubjects(subjectRows);
     setTasks(taskRows);
     setNotes(noteRows);
+    setLectureFiles(fileRows);
     setAllClasses(classRows);
     setTodayClasses(classRows.filter(item => Number(item.day_of_week) === dayOfWeek));
     setActivities(activityRows);
@@ -268,6 +291,52 @@ export default function App() {
     } catch (error) {
       Alert.alert('Could not save budget', String(error));
     }
+  };
+
+  const importLectureFile = async () => {
+    if (!NativeModules.LectureFiles || !NativeModules.LectureFiles.pickFile) {
+      Alert.alert('File import unavailable', 'The Android file picker is not available in this build.');
+      return;
+    }
+    let picked;
+    try {
+      picked = await NativeModules.LectureFiles.pickFile();
+      if (!picked) return;
+      await execute(
+        'INSERT INTO lecture_files (name, stored_path, mime_type, size_bytes, subject_id, category) VALUES (?, ?, ?, ?, ?, ?)',
+        [picked.name, picked.path, picked.mimeType || '', Number(picked.sizeBytes) || 0, fileImportSubjectId ? Number(fileImportSubjectId) : null, fileCategoryDraft],
+      );
+      setFileSearch('');
+      await refresh();
+    } catch (error) {
+      if (picked?.path && NativeModules.LectureFiles.deleteFile) {
+        try { await NativeModules.LectureFiles.deleteFile(picked.path); } catch (_) {}
+      }
+      Alert.alert('Could not import file', String(error?.message || error));
+    }
+  };
+
+  const openLectureFile = async item => {
+    try {
+      await NativeModules.LectureFiles.openFile(item.stored_path);
+    } catch (error) {
+      Alert.alert('Could not open file', String(error?.message || error) + '\n\nInstall an app that can open this file type and try again.');
+    }
+  };
+
+  const removeLectureFile = item => {
+    Alert.alert('Delete file?', 'This removes the local copy of ' + item.name + ' from NewApk.', [
+      {text: 'Cancel', style: 'cancel'},
+      {text: 'Delete', style: 'destructive', onPress: async () => {
+        try {
+          if (NativeModules.LectureFiles?.deleteFile) await NativeModules.LectureFiles.deleteFile(item.stored_path);
+          await execute('DELETE FROM lecture_files WHERE id = ?', [item.id]);
+          await refresh();
+        } catch (error) {
+          Alert.alert('Could not delete file', String(error?.message || error));
+        }
+      }},
+    ]);
   };
 
   const saveCategoryLimit = async () => {
@@ -936,13 +1005,128 @@ export default function App() {
     );
   };
 
+  const renderFiles = () => {
+    const visibleFiles = lectureFiles.filter(item => {
+      const matchesSubject = fileSubjectFilter === 'All' || String(item.subject_id || '') === fileSubjectFilter;
+      const kind = fileKind(item.mime_type, item.name);
+      const matchesType = fileTypeFilter === 'All'
+        || (fileTypeFilter === 'PDFs' && kind === 'PDF')
+        || (fileTypeFilter === 'Images' && kind === 'Image')
+        || (fileTypeFilter === 'Documents' && kind === 'Document');
+      const needle = fileSearch.trim().toLowerCase();
+      const matchesSearch = !needle || [item.name, item.subject_name, item.subject_code, item.category]
+        .some(value => String(value || '').toLowerCase().includes(needle));
+      return matchesSubject && matchesType && matchesSearch;
+    });
+    const pdfCount = lectureFiles.filter(item => fileKind(item.mime_type, item.name) === 'PDF').length;
+    const imageCount = lectureFiles.filter(item => fileKind(item.mime_type, item.name) === 'Image').length;
+    const documentCount = lectureFiles.filter(item => fileKind(item.mime_type, item.name) === 'Document').length;
+    return (
+      <>
+        <View style={styles.fileHero}>
+          <Text style={styles.fileHeroEyebrow}>YOUR OFFLINE LIBRARY</Text>
+          <Text style={styles.fileHeroTitle}>Keep your study files close.</Text>
+          <Text style={styles.fileHeroCaption}>Import once and open saved copies without an internet connection.</Text>
+          <View style={styles.fileStatsRow}>
+            <View style={styles.fileStat}>
+              <Text style={styles.fileStatValue}>{lectureFiles.length}</Text>
+              <Text style={styles.fileStatLabel}>FILES</Text>
+            </View>
+            <View style={styles.fileStat}>
+              <Text style={styles.fileStatValue}>{pdfCount}</Text>
+              <Text style={styles.fileStatLabel}>PDFS</Text>
+            </View>
+            <View style={styles.fileStat}>
+              <Text style={styles.fileStatValue}>{imageCount + documentCount}</Text>
+              <Text style={styles.fileStatLabel}>OTHER</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.sectionBlock}>
+          <SectionTitle title="Import to subject" />
+          <Card>
+            <Text style={styles.bodyText}>Choose where to organize the next file. You can leave it unassigned.</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.fileChipRow}>
+              <Pressable onPress={() => setFileImportSubjectId('')} style={[styles.choiceChip, !fileImportSubjectId && styles.choiceChipSelected]}>
+                <Text style={[styles.choiceChipText, !fileImportSubjectId && styles.choiceChipTextSelected]}>Unassigned</Text>
+              </Pressable>
+              {subjects.map(subject => (
+                <Pressable key={subject.id} onPress={() => setFileImportSubjectId(String(subject.id))} style={[styles.choiceChip, fileImportSubjectId === String(subject.id) && styles.choiceChipSelected]}>
+                  <Text style={[styles.choiceChipText, fileImportSubjectId === String(subject.id) && styles.choiceChipTextSelected]}>{subject.code || subject.name}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+            <Text style={styles.fieldLabel}>FILE CATEGORY</Text>
+            <View style={styles.choiceRow}>
+              {['Lecture', 'Handout', 'Reference', 'Other'].map(option => (
+                <Pressable key={option} onPress={() => setFileCategoryDraft(option)} style={[styles.choiceChip, fileCategoryDraft === option && styles.choiceChipSelected]}>
+                  <Text style={[styles.choiceChipText, fileCategoryDraft === option && styles.choiceChipTextSelected]}>{option}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <Action label="＋ Import file from device" onPress={importLectureFile} />
+          </Card>
+        </View>
+
+        <View style={styles.sectionBlock}>
+          <SectionTitle title="My library" />
+          <TextInput value={fileSearch} onChangeText={setFileSearch} placeholder="Search files or subjects" placeholderTextColor={colors.muted} style={styles.taskSearch} />
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.fileChipRow}>
+            {['All', ...subjects.map(subject => String(subject.id))].map(filter => {
+              const selected = fileSubjectFilter === filter;
+              const label = filter === 'All' ? 'All subjects' : (subjects.find(subject => String(subject.id) === filter)?.code || subjects.find(subject => String(subject.id) === filter)?.name || 'Subject');
+              return (
+                <Pressable key={filter} onPress={() => setFileSubjectFilter(filter)} style={[styles.taskFilterChip, selected && styles.taskFilterSelected]}>
+                  <Text style={[styles.taskFilterText, selected && styles.taskFilterTextSelected]}>{label}</Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.fileChipRow}>
+            {['All', 'PDFs', 'Images', 'Documents'].map(filter => (
+              <Pressable key={filter} onPress={() => setFileTypeFilter(filter)} style={[styles.taskFilterChip, fileTypeFilter === filter && styles.taskFilterSelected]}>
+                <Text style={[styles.taskFilterText, fileTypeFilter === filter && styles.taskFilterTextSelected]}>{filter}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+          <View style={styles.fileList}>
+            {visibleFiles.map(item => {
+              const kind = fileKind(item.mime_type, item.name);
+              return (
+                <View key={item.id} style={styles.fileCard}>
+                  <Pressable onPress={() => openLectureFile(item)} style={styles.fileOpenRow} accessibilityRole="button" accessibilityLabel={'Open ' + item.name}>
+                    <View style={[styles.fileKindIcon, kind === 'PDF' ? styles.fileKindPdf : kind === 'Image' ? styles.fileKindImage : styles.fileKindDocument]}>
+                      <Text style={styles.fileKindGlyph}>{kind === 'PDF' ? 'PDF' : kind === 'Image' ? 'IMG' : 'DOC'}</Text>
+                    </View>
+                    <View style={styles.fileInfo}>
+                      <Text style={styles.fileName} numberOfLines={2}>{item.name}</Text>
+                      <Text style={styles.fileMeta}>{item.subject_code || item.subject_name || 'Unassigned'} · {item.category} · {formatFileSize(item.size_bytes)}</Text>
+                      <Text style={styles.fileOpenHint}>Tap to open saved copy</Text>
+                    </View>
+                  </Pressable>
+                  <Pressable onPress={() => removeLectureFile(item)} style={styles.taskRemove} accessibilityRole="button" accessibilityLabel={'Delete ' + item.name}>
+                    <Text style={styles.taskRemoveText}>×</Text>
+                  </Pressable>
+                </View>
+              );
+            })}
+            {!visibleFiles.length ? (
+              <Card><Empty label={fileSearch.trim() ? 'No files match your search.' : lectureFiles.length ? 'No files match these filters.' : 'Your library is empty. Import lecture files, PDFs, and images from your device.'} /></Card>
+            ) : null}
+          </View>
+        </View>
+      </>
+    );
+  };
+
   const renderContent = () => {
     if (active === 'Home') return renderHome();
     if (active === 'Tasks') return renderTasks();
     if (active === 'Notepad') return <>{renderList(notes, 'Notes')}<Action label="＋ New note" onPress={() => setShowForm(true)} /></>;
     if (active === 'Budget') return renderBudget();
     if (active === 'Schedule') return renderSchedule();
-    if (active === 'Files') return <Card><Heading>Lecture Files</Heading><Empty label="Organize PDFs, documents, and images by subject. File importing and offline viewing are planned." /></Card>;
+    if (active === 'Files') return renderFiles();
     return (
       <>
         <Card>

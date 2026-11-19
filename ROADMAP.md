@@ -20,7 +20,7 @@
 - [x] Implement the Tasks overview with categories, priorities, due dates, search, filters and completion tracking.
 - [ ] Complete task editing, checklists, personal activities, notes and subject linking.
 - [ ] Complete budget analytics, category limits and savings-goal tracking.
-- [ ] Implement lecture file import and offline viewing.
+- [x] Add the offline lecture-file library, subject/category grouping, Android document picker, private file copies and external-app opening (CI/runtime verification pending).
 - [ ] Implement complete dashboard aggregation and cross-module refresh.
 - [ ] Implement alarms, local notifications and reminder scheduling.
 - [ ] Implement Android home-screen widgets.

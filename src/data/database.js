@@ -90,6 +90,18 @@ export async function openDatabase() {
       UNIQUE(month, category)
     );`);
     await tx.executeSql('CREATE INDEX IF NOT EXISTS idx_budget_transactions_category_type ON budget_transactions (category, type);');
+    await tx.executeSql(`CREATE TABLE IF NOT EXISTS lecture_files (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      stored_path TEXT NOT NULL UNIQUE,
+      mime_type TEXT NOT NULL DEFAULT '',
+      size_bytes INTEGER NOT NULL DEFAULT 0,
+      subject_id INTEGER,
+      category TEXT NOT NULL DEFAULT 'Lecture',
+      imported_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(subject_id) REFERENCES subjects(id) ON DELETE SET NULL
+    );`);
+    await tx.executeSql('CREATE INDEX IF NOT EXISTS idx_lecture_files_subject_imported ON lecture_files (subject_id, imported_at);');
     await tx.executeSql(`CREATE TABLE IF NOT EXISTS savings_goals (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       title TEXT NOT NULL,

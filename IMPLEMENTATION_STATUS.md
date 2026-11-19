@@ -65,3 +65,10 @@ Implement the Lecture Files #14 document library with local file import, subject
 - Corrected the shared budget modal so savings-goal forms do not show a transaction-title field and contribution forms only show the contribution amount.
 - Budget build run #23 for commit `94bb6966076d8414acb4c67b5b7ec9fc3bccea63` completed successfully. The `NewApk-debug` artifact was uploaded (33,193,947 bytes; artifact ID `14502738584`).
 - The modal correction is committed separately and requires its own passing build.
+
+## Lecture Files module implementation
+- Added an Android Storage Access Framework picker for PDFs, images, and common office/text document types.
+- Selected files are copied into NewApk's private `files/lecture_files` folder (100 MB per-file limit) so imported copies remain accessible offline.
+- Added FileProvider-backed opening with Android apps, local deletion, subject association, category labels, search and PDF/image/document filters.
+- Added `lecture_files` SQLite metadata and a private-file provider path. No storage-wide permission or cloud service is required.
+- Build and runtime verification for this native module is pending; external viewer availability depends on apps installed on the device.
