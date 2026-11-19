@@ -24,7 +24,7 @@
 - [ ] Complete budget analytics, category limits and savings-goal tracking.
 - [x] Add the offline lecture-file library, subject/category grouping, Android document picker, private file copies and external-app opening (CI/runtime verification pending).
 - [ ] Implement complete dashboard aggregation and cross-module refresh.
-- [ ] Implement alarms, local notifications and reminder scheduling.
+- [ ] Implement and test local notifications, class/task/activity reminders, sound/vibration, snooze/dismiss, boot/time-change rescheduling and exact-alarm access.
 - [ ] Implement Android home-screen widgets.
 - [x] Implement persistent Forest, Sunset, Monochrome and Night appearance presets.
 - [x] Add editable custom color combinations for backgrounds, cards, primary/accent, text and borders.

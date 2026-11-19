@@ -1,7 +1,8 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import {
-  ActivityIndicator, Alert, NativeModules, SafeAreaView, ScrollView, StatusBar,
-  StyleSheet, Text, TextInput, Pressable, View,
+  ActivityIndicator, Alert, AppState, NativeModules, PermissionsAndroid, Platform,
+  SafeAreaView, ScrollView, StatusBar, StyleSheet, Switch, Text, TextInput,
+  Pressable, View,
 } from 'react-native';
 import {execute, getDashboardSummary, openDatabase, query} from './src/data/database';
 import {defaultCustomPalette, palettes} from './src/theme/palettes';
@@ -17,6 +18,134 @@ const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 
 const EXPENSE_CATEGORIES = ['Food', 'Transport', 'School', 'Personal', 'Bills', 'Other'];
 const INCOME_CATEGORIES = ['Allowance', 'Salary', 'Gift', 'Other'];
 const NOTE_CATEGORIES = ['General', 'Lecture', 'Ideas', 'Personal', 'Other'];
+
+const DEFAULT_REMINDER_SETTINGS = {
+  enabled: false,
+  classesEnabled: true,
+  tasksEnabled: true,
+  activitiesEnabled: true,
+  classLeadMinutes: 30,
+  taskLeadMinutes: 60,
+  activityLeadMinutes: 30,
+  soundEnabled: true,
+  vibrationEnabled: true,
+  snoozeMinutes: 5,
+};
+
+function readReminderSettings(rows) {
+  const result = {...DEFAULT_REMINDER_SETTINGS};
+  const booleanKeys = new Set(['enabled', 'classesEnabled', 'tasksEnabled', 'activitiesEnabled', 'soundEnabled', 'vibrationEnabled']);
+  const numberKeys = new Set(['classLeadMinutes', 'taskLeadMinutes', 'activityLeadMinutes', 'snoozeMinutes']);
+  rows.forEach(row => {
+    const key = String(row.key || '').replace(/^reminder_/, '');
+    if (booleanKeys.has(key)) result[key] = String(row.value) === 'true';
+    if (numberKeys.has(key)) {
+      const value = Number(row.value);
+      if (Number.isFinite(value) && value >= 0) result[key] = value;
+    }
+  });
+  return result;
+}
+
+function parseLocalDateTime(value, fallbackTime = '00:00') {
+  if (!value) return null;
+  const parts = String(value).replace('T', ' ').split(' ');
+  const dateParts = (parts[0] || '').split('-').map(Number);
+  const timeParts = (parts[1] || fallbackTime).split(':').map(Number);
+  if (dateParts.length !== 3 || dateParts.some(part => !Number.isFinite(part))) return null;
+  const date = new Date(
+    dateParts[0], dateParts[1] - 1, dateParts[2],
+    timeParts[0] || 0, timeParts[1] || 0, 0, 0,
+  );
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function toReminderWallTime(date) {
+  const pad = value => String(value).padStart(2, '0');
+  return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate())
+    + ' ' + pad(date.getHours()) + ':' + pad(date.getMinutes());
+}
+
+function makeReminderRecord(id, title, body, when, repeatWeekly, settings) {
+  return {
+    id,
+    rootId: id,
+    title,
+    body,
+    wallTime: toReminderWallTime(when),
+    repeatWeekly,
+    sound: settings.soundEnabled,
+    vibrate: settings.vibrationEnabled,
+    snoozeMinutes: settings.snoozeMinutes,
+  };
+}
+
+function buildReminderPayload(classRows, taskRows, activityRows, settings, now = new Date()) {
+  if (!settings.enabled) return [];
+  const reminders = [];
+  const makeReminderTime = (eventTime, leadMinutes) => {
+    const trigger = new Date(eventTime.getTime() - leadMinutes * 60 * 1000);
+    if (trigger <= now && eventTime > now) return new Date(now.getTime() + 3000);
+    return trigger;
+  };
+
+  if (settings.classesEnabled) {
+    classRows.forEach(item => {
+      const match = /^(\d{2}):(\d{2})$/.exec(String(item.start_time || ''));
+      if (!match) return;
+      const hours = Number(match[1]);
+      const minutes = Number(match[2]);
+      if (hours > 23 || minutes > 59) return;
+      const offset = (Number(item.day_of_week) - now.getDay() + 7) % 7;
+      const classTime = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset, hours, minutes, 0, 0);
+      if (classTime <= now) classTime.setDate(classTime.getDate() + 7);
+      const reminderTime = makeReminderTime(classTime, settings.classLeadMinutes);
+      const subjectName = item.subject_name || 'Class';
+      const subjectCode = item.subject_code ? item.subject_code + ' · ' : '';
+      const type = item.class_type ? item.class_type + ' · ' : '';
+      const room = item.room || item.subject_room;
+      const body = subjectCode + type + (room ? room + ' · ' : '') + 'Starts ' + formatClock(item.start_time);
+      reminders.push(makeReminderRecord('class-' + item.id, 'Upcoming class: ' + subjectName, body, reminderTime, true, settings));
+    });
+  }
+
+  if (settings.tasksEnabled) {
+    taskRows.forEach(item => {
+      if (Number(item.completed) || !item.due_at) return;
+      const dueDate = parseLocalDateTime(String(item.due_at).slice(0, 10), '08:00');
+      if (!dueDate) return;
+      dueDate.setHours(8, 0, 0, 0);
+      const reminderTime = new Date(dueDate.getTime() - settings.taskLeadMinutes * 60 * 1000);
+      if (reminderTime <= now) return;
+      reminders.push(makeReminderRecord(
+        'task-' + item.id,
+        'Deadline: ' + item.title,
+        'This task is due on ' + formatDate(item.due_at) + '.',
+        reminderTime,
+        false,
+        settings,
+      ));
+    });
+  }
+
+  if (settings.activitiesEnabled) {
+    activityRows.forEach(item => {
+      const start = parseLocalDateTime(item.starts_at);
+      if (!start || start <= now) return;
+      const reminderTime = makeReminderTime(start, settings.activityLeadMinutes);
+      reminders.push(makeReminderRecord(
+        'activity-' + item.id,
+        'Upcoming: ' + item.title,
+        item.details || ('Starts ' + formatActivityDateTime(item.starts_at, item.ends_at)),
+        reminderTime,
+        false,
+        settings,
+      ));
+    });
+  }
+
+  return reminders;
+}
 
 function formatClock(value) {
   if (!value) return '';
@@ -153,6 +282,8 @@ export default function App() {
   const [fileImportSubjectId, setFileImportSubjectId] = useState('');
   const [fileCategoryDraft, setFileCategoryDraft] = useState('Lecture');
   const [activities, setActivities] = useState([]);
+  const [reminderSettings, setReminderSettings] = useState({...DEFAULT_REMINDER_SETTINGS});
+  const [reminderStatus, setReminderStatus] = useState({notificationsEnabled: false, exactAlarmAllowed: false});
   const [showActivityForm, setShowActivityForm] = useState(false);
   const [editingActivityId, setEditingActivityId] = useState(null);
   const [activityTitleDraft, setActivityTitleDraft] = useState('');
@@ -183,7 +314,7 @@ export default function App() {
 
   const refresh = async () => {
     const dayOfWeek = new Date().getDay(); // Schedule convention: Sunday=0 through Saturday=6.
-    const [stats, subjectRows, taskRows, noteRows, fileRows, classRows, activityRows, transactionRows, limitRows, categoryBudgetRows, savingsGoalRows] = await Promise.all([
+    const [stats, subjectRows, taskRows, noteRows, fileRows, classRows, activityRows, transactionRows, limitRows, categoryBudgetRows, savingsGoalRows, reminderRows] = await Promise.all([
       getDashboardSummary(),
       query('SELECT * FROM subjects ORDER BY name'),
       query("SELECT * FROM tasks ORDER BY completed, CASE WHEN due_at IS NULL THEN 1 ELSE 0 END, due_at ASC, CASE priority WHEN 'High' THEN 0 WHEN 'Medium' THEN 1 ELSE 2 END, id DESC"),
@@ -195,6 +326,7 @@ export default function App() {
       query("SELECT limit_amount FROM monthly_budgets WHERE month = strftime('%Y-%m', 'now', 'localtime') LIMIT 1"),
       query("SELECT * FROM category_budgets WHERE month = strftime('%Y-%m', 'now', 'localtime') ORDER BY category"),
       query('SELECT * FROM savings_goals ORDER BY id DESC'),
+      query("SELECT key, value FROM settings WHERE key LIKE 'reminder_%'"),
     ]);
     setSummary(stats);
     setSubjects(subjectRows);
@@ -208,6 +340,21 @@ export default function App() {
     setMonthlyLimit(limitRows[0]?.limit_amount || 0);
     setCategoryBudgets(categoryBudgetRows);
     setSavingsGoals(savingsGoalRows);
+
+    const preferences = readReminderSettings(reminderRows);
+    setReminderSettings(preferences);
+    if (NativeModules.Reminders?.replaceReminders) {
+      try {
+        const scheduled = buildReminderPayload(classRows, taskRows, activityRows, preferences);
+        const nativeStatus = await NativeModules.Reminders.replaceReminders(JSON.stringify(scheduled));
+        setReminderStatus({
+          notificationsEnabled: !!nativeStatus?.notificationsEnabled,
+          exactAlarmAllowed: !!nativeStatus?.exactAlarmAllowed,
+        });
+      } catch (_) {
+        // Keep the planner usable if the optional Android reminder bridge is unavailable.
+      }
+    }
   };
 
   useEffect(() => {
@@ -244,7 +391,61 @@ export default function App() {
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextState => {
+      if (nextState === 'active') {
+        refresh().catch(() => {});
+      }
+    });
+    return () => subscription.remove();
+  }, []);
+
   const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  const saveReminderPreference = async (key, value) => {
+    try {
+      await execute(
+        'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+        ['reminder_' + key, String(value)],
+      );
+      await refresh();
+    } catch (error) {
+      Alert.alert('Could not save reminder setting', String(error?.message || error));
+    }
+  };
+
+  const requestNotificationAccess = async () => {
+    try {
+      if (Platform.OS === 'android' && Number(Platform.Version) >= 33) {
+        const permission = PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS || 'android.permission.POST_NOTIFICATIONS';
+        const result = await PermissionsAndroid.request(permission);
+        if (result !== PermissionsAndroid.RESULTS.GRANTED) {
+          Alert.alert('Notifications are disabled', 'Allow NewApk notifications in Android settings so reminders can appear on your lock screen and notification shade.', [
+            {text: 'Cancel', style: 'cancel'},
+            {text: 'Open settings', onPress: () => NativeModules.Reminders?.openNotificationSettings?.()},
+          ]);
+        }
+      }
+      const status = await NativeModules.Reminders?.getStatus?.();
+      if (status) {
+        setReminderStatus({
+          notificationsEnabled: !!status.notificationsEnabled,
+          exactAlarmAllowed: !!status.exactAlarmAllowed,
+        });
+      }
+      await refresh();
+    } catch (error) {
+      Alert.alert('Could not request notification access', String(error?.message || error));
+    }
+  };
+
+  const openExactAlarmSettings = async () => {
+    try {
+      await NativeModules.Reminders?.openExactAlarmSettings?.();
+    } catch (error) {
+      Alert.alert('Could not open alarm access settings', String(error?.message || error));
+    }
+  };
 
   const chooseAppearance = async name => {
     try {
@@ -1496,6 +1697,98 @@ export default function App() {
           <Action label="Save and apply custom colors" onPress={saveCustomAppearance} />
           <Text style={styles.formSubtitle}>{paletteName === 'Custom' ? 'Custom colors are currently active.' : 'Save to apply this custom combination.'}</Text>
         </Card>
+        <Card>
+          <Heading>Notifications & reminders</Heading>
+          <Text style={styles.bodyText}>Set local alerts for classes, assignment deadlines and personal activities. Reminders are stored on this device and do not need an internet connection.</Text>
+          <View style={styles.reminderSettingRow}>
+            <View style={styles.reminderSettingInfo}>
+              <Text style={styles.reminderSettingLabel}>Enable reminders</Text>
+              <Text style={styles.reminderSettingHint}>Turn all local reminders on or off.</Text>
+            </View>
+            <Switch value={reminderSettings.enabled} onValueChange={value => saveReminderPreference('enabled', value)} trackColor={{false: colors.border, true: colors.accent}} thumbColor={reminderSettings.enabled ? colors.primary : '#F4F4F4'} />
+          </View>
+          <View style={styles.reminderSettingRow}>
+            <View style={styles.reminderSettingInfo}>
+              <Text style={styles.reminderSettingLabel}>Class reminders</Text>
+              <Text style={styles.reminderSettingHint}>Repeat weekly before each scheduled class.</Text>
+            </View>
+            <Switch value={reminderSettings.classesEnabled} onValueChange={value => saveReminderPreference('classesEnabled', value)} trackColor={{false: colors.border, true: colors.accent}} thumbColor={reminderSettings.classesEnabled ? colors.primary : '#F4F4F4'} />
+          </View>
+          <Text style={styles.fieldLabel}>CLASS ADVANCE NOTICE</Text>
+          <View style={styles.choiceRow}>
+            {[15, 30, 45].map(value => (
+              <Pressable key={value} onPress={() => saveReminderPreference('classLeadMinutes', value)} style={[styles.choiceChip, reminderSettings.classLeadMinutes === value && styles.choiceChipSelected]}>
+                <Text style={[styles.choiceChipText, reminderSettings.classLeadMinutes === value && styles.choiceChipTextSelected]}>{value} min</Text>
+              </Pressable>
+            ))}
+          </View>
+          <View style={styles.reminderSettingRow}>
+            <View style={styles.reminderSettingInfo}>
+              <Text style={styles.reminderSettingLabel}>Task deadline reminders</Text>
+              <Text style={styles.reminderSettingHint}>Alert on the morning a task is due.</Text>
+            </View>
+            <Switch value={reminderSettings.tasksEnabled} onValueChange={value => saveReminderPreference('tasksEnabled', value)} trackColor={{false: colors.border, true: colors.accent}} thumbColor={reminderSettings.tasksEnabled ? colors.primary : '#F4F4F4'} />
+          </View>
+          <Text style={styles.fieldLabel}>DEADLINE ADVANCE NOTICE</Text>
+          <View style={styles.choiceRow}>
+            {[15, 60, 120].map(value => (
+              <Pressable key={value} onPress={() => saveReminderPreference('taskLeadMinutes', value)} style={[styles.choiceChip, reminderSettings.taskLeadMinutes === value && styles.choiceChipSelected]}>
+                <Text style={[styles.choiceChipText, reminderSettings.taskLeadMinutes === value && styles.choiceChipTextSelected]}>{value < 60 ? value + ' min' : value / 60 + ' hr'}</Text>
+              </Pressable>
+            ))}
+          </View>
+          <View style={styles.reminderSettingRow}>
+            <View style={styles.reminderSettingInfo}>
+              <Text style={styles.reminderSettingLabel}>Activity reminders</Text>
+              <Text style={styles.reminderSettingHint}>Alert before appointments and personal plans.</Text>
+            </View>
+            <Switch value={reminderSettings.activitiesEnabled} onValueChange={value => saveReminderPreference('activitiesEnabled', value)} trackColor={{false: colors.border, true: colors.accent}} thumbColor={reminderSettings.activitiesEnabled ? colors.primary : '#F4F4F4'} />
+          </View>
+          <Text style={styles.fieldLabel}>ACTIVITY ADVANCE NOTICE</Text>
+          <View style={styles.choiceRow}>
+            {[15, 30, 60].map(value => (
+              <Pressable key={value} onPress={() => saveReminderPreference('activityLeadMinutes', value)} style={[styles.choiceChip, reminderSettings.activityLeadMinutes === value && styles.choiceChipSelected]}>
+                <Text style={[styles.choiceChipText, reminderSettings.activityLeadMinutes === value && styles.choiceChipTextSelected]}>{value < 60 ? value + ' min' : value / 60 + ' hr'}</Text>
+              </Pressable>
+            ))}
+          </View>
+          <View style={styles.reminderSettingRow}>
+            <View style={styles.reminderSettingInfo}>
+              <Text style={styles.reminderSettingLabel}>Notification sound</Text>
+              <Text style={styles.reminderSettingHint}>Use the device notification sound.</Text>
+            </View>
+            <Switch value={reminderSettings.soundEnabled} onValueChange={value => saveReminderPreference('soundEnabled', value)} trackColor={{false: colors.border, true: colors.accent}} thumbColor={reminderSettings.soundEnabled ? colors.primary : '#F4F4F4'} />
+          </View>
+          <View style={styles.reminderSettingRow}>
+            <View style={styles.reminderSettingInfo}>
+              <Text style={styles.reminderSettingLabel}>Vibration</Text>
+              <Text style={styles.reminderSettingHint}>Vibrate when a reminder arrives.</Text>
+            </View>
+            <Switch value={reminderSettings.vibrationEnabled} onValueChange={value => saveReminderPreference('vibrationEnabled', value)} trackColor={{false: colors.border, true: colors.accent}} thumbColor={reminderSettings.vibrationEnabled ? colors.primary : '#F4F4F4'} />
+          </View>
+          <Text style={styles.fieldLabel}>SNOOZE DURATION</Text>
+          <View style={styles.choiceRow}>
+            {[5, 10, 15].map(value => (
+              <Pressable key={value} onPress={() => saveReminderPreference('snoozeMinutes', value)} style={[styles.choiceChip, reminderSettings.snoozeMinutes === value && styles.choiceChipSelected]}>
+                <Text style={[styles.choiceChipText, reminderSettings.snoozeMinutes === value && styles.choiceChipTextSelected]}>{value} min</Text>
+              </Pressable>
+            ))}
+          </View>
+          <View style={styles.reminderAccessRow}>
+            <View style={styles.reminderSettingInfo}>
+              <Text style={styles.reminderSettingLabel}>Notification access</Text>
+              <Text style={styles.reminderSettingHint}>{reminderStatus.notificationsEnabled ? 'Allowed by Android.' : 'Allow notifications to show reminders on your lock screen and notification shade.'}</Text>
+            </View>
+            <Action label={reminderStatus.notificationsEnabled ? 'Check' : 'Allow'} secondary onPress={requestNotificationAccess} />
+          </View>
+          <View style={styles.reminderAccessRow}>
+            <View style={styles.reminderSettingInfo}>
+              <Text style={styles.reminderSettingLabel}>Precise alarm access</Text>
+              <Text style={styles.reminderSettingHint}>{reminderStatus.exactAlarmAllowed ? 'Precise scheduling is available.' : 'Android may deliver reminders a little later until exact-alarm access is allowed.'}</Text>
+            </View>
+            {!reminderStatus.exactAlarmAllowed ? <Action label="Open settings" secondary onPress={openExactAlarmSettings} /> : <Text style={styles.reminderAccessState}>Allowed</Text>}
+          </View>
+        </Card>
         <Card><Heading>Data and privacy</Heading><Text style={styles.bodyText}>Your planner data is stored locally on this device. NewApk does not require an account or cloud database.</Text></Card>
         <Card><Heading>About NewApk</Heading><Text style={styles.bodyText}>React Native student productivity app · Offline-first</Text></Card>
       </>
@@ -1914,5 +2207,11 @@ function makeStyles(c) {
     appearanceColorGrid: {flexDirection: 'row', flexWrap: 'wrap', gap: 9},
     appearanceColorField: {width: '48%', flexGrow: 1, gap: 5},
     appearanceColorLabel: {fontSize: 9, color: c.muted, fontWeight: '800'},
+    reminderSettingRow: {flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 9, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border},
+    reminderSettingInfo: {flex: 1, gap: 3},
+    reminderSettingLabel: {fontSize: 11, color: c.text, fontWeight: '800'},
+    reminderSettingHint: {fontSize: 9, color: c.muted, lineHeight: 14},
+    reminderAccessRow: {flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 10},
+    reminderAccessState: {fontSize: 10, color: c.primary, fontWeight: '800'},
   });
 }
