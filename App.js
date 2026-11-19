@@ -1650,7 +1650,7 @@ export default function App() {
       </View>
 
       <View style={styles.sectionBlock}>
-        <SectionTitle title="Weekly task progress" action="View tasks" onPress={() => setActive('Tasks')} />
+        <SectionTitle title="Task deadlines" action="View tasks" onPress={() => setActive('Tasks')} />
         <Card>
           <View style={styles.budgetSummaryRow}>
             <View>
@@ -1662,7 +1662,7 @@ export default function App() {
               <Text style={[styles.budgetBalanceValue, overdueTasks.length ? {color: colors.accent} : null]}>{overdueTasks.length}</Text>
             </View>
           </View>
-          <Text style={styles.budgetFootnote}>{pendingTasks.length ? (pendingTasks.length - dueThisWeek.length) + ' other pending tasks outside this week or without a deadline' : 'All tasks are complete. Add a task when something needs your attention.'}</Text>
+          <Text style={styles.budgetFootnote}>{pendingTasks.length ? (pendingTasks.length - dueThisWeek.length - overdueTasks.length) + ' other pending tasks are due later or have no deadline' : 'All tasks are complete. Add a task when something needs your attention.'}</Text>
           <Action label="＋ Add task" secondary onPress={() => {setActive('Tasks'); openTaskForm(null);}} />
         </Card>
       </View>
@@ -1692,6 +1692,9 @@ export default function App() {
                   <View style={styles.activityInfo}>
                     <Text style={styles.taskTitle} numberOfLines={1}>{goal.title}</Text>
                     <Text style={styles.taskDue}>₱{saved.toFixed(2)} of ₱{target.toFixed(2)} · {Math.round(progress)}%</Text>
+                    <View style={[styles.progressTrack, styles.goalProgressTrack]}>
+                      <View style={[styles.progressFill, {width: progress + '%'}]} />
+                    </View>
                   </View>
                 </View>;
               })}
@@ -2865,6 +2868,7 @@ function makeStyles(c) {
     budgetBalance: {alignItems: 'flex-end'},
     budgetBalanceValue: {fontSize: 15, color: c.primary, fontWeight: '800', marginTop: 6},
     progressTrack: {height: 8, backgroundColor: c.background, borderRadius: 5, overflow: 'hidden'},
+    goalProgressTrack: {height: 5, marginTop: 2},
     progressFill: {height: 8, backgroundColor: c.primary, borderRadius: 5},
     budgetFootnote: {fontSize: 10, color: c.muted},
     activityRow: {flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 7},
