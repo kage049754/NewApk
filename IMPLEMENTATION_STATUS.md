@@ -38,11 +38,23 @@ Initial React Native foundation committed to `main`.
 - GitHub Actions run #20 for commit `1bf9f4da43ac05270a5fd9c1420a22674dda615d` completed successfully; APK artifact `NewApk-debug` uploaded (33,193,954 bytes, artifact ID `14502061185`).
 - The build verifies compilation and artifact upload only; it does not verify emulator launch or runtime behavior.
 
+## Budget module update
+- Expanded Budget #9 with an available-this-month hero, income/expense/balance totals, monthly spending progress, category spending bars, category-specific monthly caps and savings goals.
+- Added savings-goal creation, progress percentages, money contributions and delete confirmation.
+- Transaction categories are chosen from simple presets; existing custom categories continue to appear in spending summaries.
+- Category limits use a new local SQLite `category_budgets` table keyed by month and category. Existing transactions and savings goals are preserved.
+- Transaction editing/deletion, report export and automatic category-limit rollover remain incomplete.
+
+## Tasks build verification update
+- GitHub Actions run #22 for commit `82ab4a8bcbc759d61180ddcfc40c6e9453cbab14` completed successfully; Android debug APK compilation and artifact upload both passed.
+- Artifact `NewApk-debug` was uploaded (33,193,951 bytes; artifact ID `14502352444`). This is CI build verification, not emulator or physical-device verification.
+- The due-date validator correction is included in this successful commit.
+
 ## Known incomplete areas
-Task editing/checklists, personal activity CRUD, note editing/subject linking, budget category analytics and savings goals, lecture file import/viewer, persistent theme settings, reminders/alarms, widgets, full backup/restore, data migration and comprehensive tests.
+Task editing/checklists, personal activity CRUD, note editing/subject linking, transaction editing/deletion and report export, lecture file import/viewer, persistent theme settings, reminders/alarms, widgets, full backup/restore, data migration and comprehensive tests.
 
 ## Next action
-Implement Budget #9 as a full spending overview with category summaries, monthly limits and savings goals, then inspect the next Android Actions result and verify its APK artifact.
+Implement the Lecture Files #14 document library with local file import, subject organization and offline opening, then inspect the next Android Actions result and verify its APK artifact.
 
 ## Tasks build verification
 - GitHub Actions run #21 for commit `c0ac58192526f9f8f86db289cf364bbc802a6258` completed successfully; all job steps, including Android debug APK compilation and artifact upload, passed.

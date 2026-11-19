@@ -81,6 +81,15 @@ export async function openDatabase() {
       limit_amount REAL NOT NULL CHECK(limit_amount >= 0),
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );`);
+    await tx.executeSql(`CREATE TABLE IF NOT EXISTS category_budgets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      month TEXT NOT NULL,
+      category TEXT NOT NULL,
+      limit_amount REAL NOT NULL CHECK(limit_amount > 0),
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(month, category)
+    );`);
+    await tx.executeSql('CREATE INDEX IF NOT EXISTS idx_budget_transactions_category_type ON budget_transactions (category, type);');
     await tx.executeSql(`CREATE TABLE IF NOT EXISTS savings_goals (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       title TEXT NOT NULL,

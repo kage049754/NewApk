@@ -14,6 +14,8 @@ const tabs = [
 ];
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const EXPENSE_CATEGORIES = ['Food', 'Transport', 'School', 'Personal', 'Bills', 'Other'];
+const INCOME_CATEGORIES = ['Allowance', 'Salary', 'Gift', 'Other'];
 
 function formatClock(value) {
   if (!value) return '';
@@ -83,6 +85,15 @@ export default function App() {
   const [activities, setActivities] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [monthlyLimit, setMonthlyLimit] = useState(0);
+  const [categoryBudgets, setCategoryBudgets] = useState([]);
+  const [savingsGoals, setSavingsGoals] = useState([]);
+  const [budgetLimitCategory, setBudgetLimitCategory] = useState('Food');
+  const [categoryLimitDraft, setCategoryLimitDraft] = useState('');
+  const [goalTitleDraft, setGoalTitleDraft] = useState('');
+  const [goalTargetDraft, setGoalTargetDraft] = useState('');
+  const [goalContributionDraft, setGoalContributionDraft] = useState('');
+  const [selectedGoalId, setSelectedGoalId] = useState(null);
+  const [budgetFormMode, setBudgetFormMode] = useState('transaction');
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState('Other');
   const [budgetLimitDraft, setBudgetLimitDraft] = useState('');
@@ -95,7 +106,7 @@ export default function App() {
 
   const refresh = async () => {
     const dayOfWeek = new Date().getDay(); // Schedule convention: Sunday=0 through Saturday=6.
-    const [stats, subjectRows, taskRows, noteRows, classRows, activityRows, transactionRows, limitRows] = await Promise.all([
+    const [stats, subjectRows, taskRows, noteRows, classRows, activityRows, transactionRows, limitRows, categoryBudgetRows, savingsGoalRows] = await Promise.all([
       getDashboardSummary(),
       query('SELECT * FROM subjects ORDER BY name'),
       query("SELECT * FROM tasks ORDER BY completed, CASE WHEN due_at IS NULL THEN 1 ELSE 0 END, due_at ASC, CASE priority WHEN 'High' THEN 0 WHEN 'Medium' THEN 1 ELSE 2 END, id DESC"),
@@ -104,6 +115,8 @@ export default function App() {
       query('SELECT * FROM activities WHERE starts_at IS NOT NULL ORDER BY starts_at ASC LIMIT 5'),
       query("SELECT * FROM budget_transactions WHERE strftime('%Y-%m', occurred_at, 'localtime') = strftime('%Y-%m', 'now', 'localtime') ORDER BY occurred_at DESC, id DESC"),
       query("SELECT limit_amount FROM monthly_budgets WHERE month = strftime('%Y-%m', 'now', 'localtime') LIMIT 1"),
+      query("SELECT * FROM category_budgets WHERE month = strftime('%Y-%m', 'now', 'localtime') ORDER BY category"),
+      query('SELECT * FROM savings_goals ORDER BY id DESC'),
     ]);
     setSummary(stats);
     setSubjects(subjectRows);
@@ -114,6 +127,8 @@ export default function App() {
     setActivities(activityRows);
     setTransactions(transactionRows);
     setMonthlyLimit(limitRows[0]?.limit_amount || 0);
+    setCategoryBudgets(categoryBudgetRows);
+    setSavingsGoals(savingsGoalRows);
   };
 
   useEffect(() => {
@@ -229,6 +244,7 @@ export default function App() {
       setTaskCategory('Assignment');
       setTaskSearch('');
       setTaskFilter('All');
+      setBudgetFormMode('transaction');
       setShowForm(false);
       await refresh();
     } catch (error) {
@@ -252,6 +268,78 @@ export default function App() {
     } catch (error) {
       Alert.alert('Could not save budget', String(error));
     }
+  };
+
+  const saveCategoryLimit = async () => {
+    const value = Number(categoryLimitDraft);
+    if (!Number.isFinite(value) || value <= 0) {
+      Alert.alert('Invalid category limit', 'Enter an amount greater than zero.');
+      return;
+    }
+    try {
+      await execute(
+        "INSERT INTO category_budgets (month, category, limit_amount) VALUES (strftime('%Y-%m', 'now', 'localtime'), ?, ?) ON CONFLICT(month, category) DO UPDATE SET limit_amount = excluded.limit_amount, updated_at = CURRENT_TIMESTAMP",
+        [budgetLimitCategory, value],
+      );
+      setCategoryLimitDraft('');
+      await refresh();
+    } catch (error) {
+      Alert.alert('Could not save category limit', String(error));
+    }
+  };
+
+  const saveSavingsGoal = async () => {
+    const title = goalTitleDraft.trim();
+    const target = Number(goalTargetDraft);
+    if (!title) {
+      Alert.alert('Missing goal name', 'Enter a name for your savings goal.');
+      return;
+    }
+    if (!Number.isFinite(target) || target <= 0) {
+      Alert.alert('Invalid target', 'Enter a target amount greater than zero.');
+      return;
+    }
+    try {
+      await execute('INSERT INTO savings_goals (title, target_amount, saved_amount) VALUES (?, ?, 0)', [title, target]);
+      setGoalTitleDraft('');
+      setGoalTargetDraft('');
+      setShowForm(false);
+      await refresh();
+    } catch (error) {
+      Alert.alert('Could not save savings goal', String(error));
+    }
+  };
+
+  const contributeToSavingsGoal = async () => {
+    const value = Number(goalContributionDraft);
+    if (!selectedGoalId) return;
+    if (!Number.isFinite(value) || value <= 0) {
+      Alert.alert('Invalid amount', 'Enter an amount greater than zero.');
+      return;
+    }
+    try {
+      await execute('UPDATE savings_goals SET saved_amount = saved_amount + ? WHERE id = ?', [value, selectedGoalId]);
+      setGoalContributionDraft('');
+      setSelectedGoalId(null);
+      setShowForm(false);
+      await refresh();
+    } catch (error) {
+      Alert.alert('Could not add savings', String(error));
+    }
+  };
+
+  const removeSavingsGoal = goal => {
+    Alert.alert('Delete savings goal?', 'This will remove the goal and its saved progress.', [
+      {text: 'Cancel', style: 'cancel'},
+      {text: 'Delete', style: 'destructive', onPress: async () => {
+        try {
+          await execute('DELETE FROM savings_goals WHERE id = ?', [goal.id]);
+          await refresh();
+        } catch (error) {
+          Alert.alert('Could not delete savings goal', String(error));
+        }
+      }},
+    ]);
   };
 
   const toggleTask = async task => {
@@ -678,43 +766,181 @@ export default function App() {
     </Card>
   );
 
-  const renderContent = () => {
-    if (active === 'Home') return renderHome();
-    if (active === 'Tasks') return renderTasks();
-    if (active === 'Notepad') return <>{renderList(notes, 'Notes')}<Action label="＋ New note" onPress={() => setShowForm(true)} /></>;
-    if (active === 'Budget') {
-      return <>
+  const renderBudget = () => {
+    const observedCategories = transactions
+      .filter(item => item.type === 'expense')
+      .map(item => String(item.category || 'Other'));
+    const categoryNames = [...new Set([...EXPENSE_CATEGORIES, ...observedCategories])].sort();
+    const categoryRows = categoryNames.map(name => {
+      const spent = transactions
+        .filter(item => item.type === 'expense' && String(item.category || 'Other') === name)
+        .reduce((sum, item) => sum + Number(item.amount), 0);
+      const limit = Number(categoryBudgets.find(item => item.category === name)?.limit_amount || 0);
+      return {name, spent, limit};
+    }).filter(item => item.spent > 0 || item.limit > 0);
+    const largestCategorySpend = Math.max(1, ...categoryRows.map(item => item.spent));
+    const monthlyProgress = monthlyLimit > 0 ? Math.min(100, Math.max(0, expenses / monthlyLimit * 100)) : 0;
+    const selectedCategoryLimit = categoryBudgets.find(item => item.category === budgetLimitCategory);
+    return (
+      <>
+        <View style={styles.budgetHero}>
+          <Text style={styles.budgetHeroLabel}>AVAILABLE THIS MONTH</Text>
+          <Text style={styles.budgetHeroValue}>₱{Math.max(0, budgetRemaining).toFixed(2)}</Text>
+          <Text style={styles.budgetHeroSubtitle}>
+            {monthlyLimit > 0 ? '₱' + expenses.toFixed(2) + ' spent from ₱' + Number(monthlyLimit).toFixed(2) : 'Set a monthly limit to track your spending.'}
+          </Text>
+          <View style={styles.budgetHeroTrack}>
+            <View style={[styles.budgetHeroFill, {width: monthlyProgress + '%'}]} />
+          </View>
+          <Text style={styles.budgetHeroFoot}>
+            {monthlyLimit > 0 ? Math.round(monthlyProgress) + '% of monthly budget used' : 'Your transactions are saved on this device.'}
+          </Text>
+        </View>
+
         <View style={styles.statsGrid}>
           <View style={[styles.statCard, styles.statgreen]}><Text style={styles.statValue}>₱{income.toFixed(2)}</Text><Text style={styles.statLabel}>Income</Text></View>
           <View style={[styles.statCard, styles.statpeach]}><Text style={styles.statValue}>₱{expenses.toFixed(2)}</Text><Text style={styles.statLabel}>Expenses</Text></View>
           <View style={[styles.statCard, styles.statblue]}><Text style={styles.statValue}>₱{(income - expenses).toFixed(2)}</Text><Text style={styles.statLabel}>Balance</Text></View>
-          <View style={[styles.statCard, styles.statgold]}><Text style={styles.statValue}>₱{budgetRemaining.toFixed(2)}</Text><Text style={styles.statLabel}>Budget remaining</Text></View>
+          <View style={[styles.statCard, styles.statgold]}><Text style={styles.statValue}>₱{budgetRemaining.toFixed(2)}</Text><Text style={styles.statLabel}>Limit remaining</Text></View>
         </View>
-        <Card>
-          <Heading>Monthly spending limit</Heading>
-          <Text style={styles.bodyText}>{monthlyLimit > 0 ? '₱' + expenses.toFixed(2) + ' spent of ₱' + monthlyLimit.toFixed(2) : 'Set a monthly limit to track your spending.'}</Text>
-          <TextInput value={budgetLimitDraft} onChangeText={setBudgetLimitDraft} keyboardType="decimal-pad" placeholder="Monthly limit (₱)" placeholderTextColor={colors.muted} style={styles.input} />
-          <Action label="Save monthly limit" onPress={saveMonthlyLimit} />
-        </Card>
-        <Card>
-          <Heading>Recent transactions</Heading>
-          {transactions.slice(0, 20).map(item => (
-            <View key={item.id} style={styles.listRow}>
-              <View style={{flex: 1}}>
-                <Text style={styles.rowTitle}>{item.title}</Text>
-                <Text style={styles.rowHint}>{item.category} · {item.type}</Text>
-              </View>
-              <Text style={[styles.rowTitle, {color: item.type === 'income' ? colors.primary : colors.text}]}>{item.type === 'income' ? '+' : '−'}₱{Number(item.amount).toFixed(2)}</Text>
+
+        <View style={styles.sectionBlock}>
+          <SectionTitle title="Monthly spending limit" />
+          <Card>
+            <Text style={styles.bodyText}>{monthlyLimit > 0 ? 'Your monthly expense limit is ₱' + Number(monthlyLimit).toFixed(2) + '.' : 'Choose a monthly spending cap to track how much remains.'}</Text>
+            <TextInput value={budgetLimitDraft} onChangeText={setBudgetLimitDraft} keyboardType="decimal-pad" placeholder="Monthly limit (₱)" placeholderTextColor={colors.muted} style={styles.input} />
+            <Action label="Save monthly limit" onPress={saveMonthlyLimit} />
+          </Card>
+        </View>
+
+        <View style={styles.sectionBlock}>
+          <SectionTitle title="Spending by category" />
+          <Card>
+            {categoryRows.map(item => {
+              const ratio = item.limit > 0 ? Math.min(100, item.spent / item.limit * 100) : Math.min(100, item.spent / largestCategorySpend * 100);
+              return (
+                <View key={item.name} style={styles.budgetCategoryRow}>
+                  <View style={styles.budgetCategoryTop}>
+                    <Text style={styles.budgetCategoryName}>{item.name}</Text>
+                    <Text style={styles.budgetCategoryAmount}>₱{item.spent.toFixed(2)}{item.limit > 0 ? ' / ₱' + item.limit.toFixed(2) : ''}</Text>
+                  </View>
+                  <View style={styles.progressTrack}>
+                    <View style={[styles.progressFill, {width: ratio + '%'}]} />
+                  </View>
+                  {item.limit > 0 && item.spent > item.limit ? <Text style={styles.budgetOverLimit}>Over category limit by ₱{(item.spent - item.limit).toFixed(2)}</Text> : null}
+                </View>
+              );
+            })}
+            {!categoryRows.length ? <Empty label="Your expense categories will appear here after you add transactions." /> : null}
+          </Card>
+        </View>
+
+        <View style={styles.sectionBlock}>
+          <SectionTitle title="Category limits" />
+          <Card>
+            <Text style={styles.bodyText}>Set a separate monthly spending cap for each category.</Text>
+            <View style={styles.choiceRow}>
+              {categoryNames.map(name => (
+                <Pressable key={name} onPress={() => {
+                  setBudgetLimitCategory(name);
+                  const savedLimit = categoryBudgets.find(item => item.category === name);
+                  setCategoryLimitDraft(savedLimit ? String(savedLimit.limit_amount) : '');
+                }} style={[styles.choiceChip, budgetLimitCategory === name && styles.choiceChipSelected]}>
+                  <Text style={[styles.choiceChipText, budgetLimitCategory === name && styles.choiceChipTextSelected]}>{name}</Text>
+                </Pressable>
+              ))}
             </View>
-          ))}
-          {!transactions.length ? <Empty label="No income or expenses recorded yet." /> : null}
-        </Card>
-        <View style={styles.formActions}>
-          <Action label="＋ Add expense" onPress={() => {setBudgetType('expense'); setShowForm(true);}} />
-          <Action label="＋ Add income" secondary onPress={() => {setBudgetType('income'); setShowForm(true);}} />
+            <Text style={styles.fieldLabel}>{budgetLimitCategory.toUpperCase()} MONTHLY LIMIT</Text>
+            <TextInput value={categoryLimitDraft} onChangeText={setCategoryLimitDraft} keyboardType="decimal-pad" placeholder="Category limit (₱)" placeholderTextColor={colors.muted} style={styles.input} />
+            <Text style={styles.formSubtitle}>{selectedCategoryLimit ? 'Current limit: ₱' + Number(selectedCategoryLimit.limit_amount).toFixed(2) : 'No limit set for this category yet.'}</Text>
+            <Action label="Save category limit" onPress={saveCategoryLimit} />
+          </Card>
         </View>
-      </>;
-    }
+
+        <View style={styles.sectionBlock}>
+          <SectionTitle title="Savings goals" action="＋ New goal" onPress={() => {
+            setBudgetFormMode('goal');
+            setShowForm(true);
+          }} />
+          <Card>
+            {savingsGoals.map(goal => {
+              const target = Number(goal.target_amount);
+              const saved = Number(goal.saved_amount);
+              const progress = target > 0 ? Math.min(100, Math.max(0, saved / target * 100)) : 0;
+              return (
+                <View key={goal.id} style={styles.savingsGoalCard}>
+                  <View style={styles.savingsGoalTop}>
+                    <View style={{flex: 1}}>
+                      <Text style={styles.savingsGoalTitle}>{goal.title}</Text>
+                      <Text style={styles.savingsGoalAmounts}>₱{saved.toFixed(2)} saved · ₱{target.toFixed(2)} goal</Text>
+                    </View>
+                    <Pressable onPress={() => removeSavingsGoal(goal)} style={styles.taskRemove} accessibilityRole="button" accessibilityLabel={'Delete ' + goal.title}>
+                      <Text style={styles.taskRemoveText}>×</Text>
+                    </Pressable>
+                  </View>
+                  <View style={styles.progressTrack}>
+                    <View style={[styles.progressFill, {width: progress + '%'}]} />
+                  </View>
+                  <View style={styles.savingsGoalBottom}>
+                    <Text style={styles.savingsGoalProgress}>{Math.round(progress)}% saved</Text>
+                    <Pressable onPress={() => {
+                      setSelectedGoalId(goal.id);
+                      setBudgetFormMode('contribution');
+                      setShowForm(true);
+                    }}>
+                      <Text style={styles.savingsGoalAction}>＋ Add savings</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              );
+            })}
+            {!savingsGoals.length ? <Empty label="Create a goal to track money you are saving toward something important." /> : null}
+            <Action label="＋ Create savings goal" secondary onPress={() => {
+              setBudgetFormMode('goal');
+              setShowForm(true);
+            }} />
+          </Card>
+        </View>
+
+        <View style={styles.sectionBlock}>
+          <SectionTitle title="Recent transactions" />
+          <Card>
+            {transactions.slice(0, 20).map(item => (
+              <View key={item.id} style={styles.listRow}>
+                <View style={{flex: 1}}>
+                  <Text style={styles.rowTitle}>{item.title}</Text>
+                  <Text style={styles.rowHint}>{item.category} · {item.type}</Text>
+                </View>
+                <Text style={[styles.rowTitle, {color: item.type === 'income' ? colors.primary : colors.text}]}>{item.type === 'income' ? '+' : '−'}₱{Number(item.amount).toFixed(2)}</Text>
+              </View>
+            ))}
+            {!transactions.length ? <Empty label="No income or expenses recorded yet." /> : null}
+          </Card>
+        </View>
+
+        <View style={styles.formActions}>
+          <Action label="＋ Add expense" onPress={() => {
+            setBudgetType('expense');
+            setBudgetFormMode('transaction');
+            setCategory('Other');
+            setShowForm(true);
+          }} />
+          <Action label="＋ Add income" secondary onPress={() => {
+            setBudgetType('income');
+            setBudgetFormMode('transaction');
+            setCategory('Other');
+            setShowForm(true);
+          }} />
+        </View>
+      </>
+    );
+  };
+
+  const renderContent = () => {
+    if (active === 'Home') return renderHome();
+    if (active === 'Tasks') return renderTasks();
+    if (active === 'Notepad') return <>{renderList(notes, 'Notes')}<Action label="＋ New note" onPress={() => setShowForm(true)} /></>;
+    if (active === 'Budget') return renderBudget();
     if (active === 'Schedule') return renderSchedule();
     if (active === 'Files') return <Card><Heading>Lecture Files</Heading><Empty label="Organize PDFs, documents, and images by subject. File importing and offline viewing are planned." /></Card>;
     return (
@@ -810,7 +1036,7 @@ export default function App() {
       ) : showForm ? (
         <View style={styles.formOverlay}>
           <View style={styles.formCard}>
-            <Text style={styles.heading}>{active === 'Budget' ? (budgetType === 'income' ? 'Add income' : 'Add expense') : active === 'Tasks' ? 'New task' : 'New note'}</Text>
+            <Text style={styles.heading}>{active === 'Budget' ? (budgetFormMode === 'goal' ? 'New savings goal' : budgetFormMode === 'contribution' ? 'Add to savings' : budgetType === 'income' ? 'Add income' : 'Add expense') : active === 'Tasks' ? 'New task' : 'New note'}</Text>
             <TextInput value={draft} onChangeText={setDraft} placeholder={active === 'Budget' ? 'Transaction name' : 'Title'} placeholderTextColor={colors.muted} style={styles.input} />
             {active === 'Tasks' ? <>
               <Text style={styles.fieldLabel}>CATEGORY</Text>
@@ -832,12 +1058,31 @@ export default function App() {
               <TextInput value={taskDueDate} onChangeText={setTaskDueDate} placeholder="Due date (YYYY-MM-DD)" placeholderTextColor={colors.muted} style={styles.input} autoCapitalize="none" maxLength={10} />
               <Text style={styles.formSubtitle}>Leave the due date blank when there is no deadline.</Text>
             </> : null}
-            {active === 'Budget' ? <>
+            {active === 'Budget' && budgetFormMode === 'transaction' ? <>
               <TextInput value={amount} onChangeText={setAmount} keyboardType="decimal-pad" placeholder="Amount (₱)" placeholderTextColor={colors.muted} style={styles.input} />
-              <TextInput value={category} onChangeText={setCategory} placeholder="Category (e.g. Food, Transport, School)" placeholderTextColor={colors.muted} style={styles.input} />
+              <Text style={styles.fieldLabel}>CATEGORY</Text>
+              <View style={styles.choiceRow}>
+                {(budgetType === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES).map(option => (
+                  <Pressable key={option} onPress={() => setCategory(option)} style={[styles.choiceChip, category === option && styles.choiceChipSelected]}>
+                    <Text style={[styles.choiceChipText, category === option && styles.choiceChipTextSelected]}>{option}</Text>
+                  </Pressable>
+                ))}
+              </View>
             </> : null}
-            <TextInput value={detail} onChangeText={setDetail} placeholder="Details (optional)" placeholderTextColor={colors.muted} style={styles.input} />
-            <View style={styles.formActions}><Action label="Cancel" secondary onPress={() => setShowForm(false)} /><Action label="Save" onPress={addItem} /></View>
+            {active === 'Budget' && budgetFormMode === 'goal' ? <>
+              <TextInput value={goalTitleDraft} onChangeText={setGoalTitleDraft} placeholder="Goal name" placeholderTextColor={colors.muted} style={styles.input} />
+              <TextInput value={goalTargetDraft} onChangeText={setGoalTargetDraft} keyboardType="decimal-pad" placeholder="Target amount (₱)" placeholderTextColor={colors.muted} style={styles.input} />
+            </> : null}
+            {active === 'Budget' && budgetFormMode === 'contribution' ? (
+              <TextInput value={goalContributionDraft} onChangeText={setGoalContributionDraft} keyboardType="decimal-pad" placeholder="Amount to add (₱)" placeholderTextColor={colors.muted} style={styles.input} />
+            ) : null}
+            {active !== 'Budget' || budgetFormMode === 'transaction' ? (
+              <TextInput value={detail} onChangeText={setDetail} placeholder="Details (optional)" placeholderTextColor={colors.muted} style={styles.input} />
+            ) : null}
+            <View style={styles.formActions}>
+              <Action label="Cancel" secondary onPress={() => setShowForm(false)} />
+              <Action label={active === 'Budget' ? budgetFormMode === 'goal' ? 'Create goal' : budgetFormMode === 'contribution' ? 'Add savings' : 'Save transaction' : 'Save'} onPress={active === 'Budget' ? budgetFormMode === 'goal' ? saveSavingsGoal : budgetFormMode === 'contribution' ? contributeToSavingsGoal : addItem : addItem} />
+            </View>
           </View>
         </View>
       ) : null}
@@ -1028,5 +1273,24 @@ function makeStyles(c) {
     priorityTextHigh: {color: '#9E4636'},
     priorityTextMedium: {color: '#8D6A2E'},
     priorityTextLow: {color: c.primary},
+    budgetHero: {backgroundColor: c.primary, borderRadius: 24, padding: 20, gap: 8},
+    budgetHeroLabel: {fontSize: 9, color: '#E4EDE1', letterSpacing: 1.4, fontWeight: '800'},
+    budgetHeroValue: {fontSize: 31, color: '#FFFFFF', fontWeight: '900', letterSpacing: -0.7, marginTop: 7},
+    budgetHeroSubtitle: {fontSize: 11, color: '#E4EDE1'},
+    budgetHeroTrack: {height: 9, backgroundColor: '#FFFFFF35', borderRadius: 6, overflow: 'hidden', marginTop: 9},
+    budgetHeroFill: {height: 9, backgroundColor: '#FFFFFF', borderRadius: 6},
+    budgetHeroFoot: {fontSize: 9, color: '#E4EDE1', fontWeight: '700'},
+    budgetCategoryRow: {gap: 7, paddingVertical: 9, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border},
+    budgetCategoryTop: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'},
+    budgetCategoryName: {fontSize: 12, color: c.text, fontWeight: '800'},
+    budgetCategoryAmount: {fontSize: 10, color: c.muted, fontWeight: '700'},
+    budgetOverLimit: {fontSize: 9, color: '#A64D3B', fontWeight: '800'},
+    savingsGoalCard: {gap: 8, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border},
+    savingsGoalTop: {flexDirection: 'row', alignItems: 'center', gap: 10},
+    savingsGoalTitle: {fontSize: 13, color: c.text, fontWeight: '800'},
+    savingsGoalAmounts: {fontSize: 10, color: c.muted, marginTop: 4},
+    savingsGoalBottom: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'},
+    savingsGoalProgress: {fontSize: 9, color: c.muted, fontWeight: '700'},
+    savingsGoalAction: {fontSize: 10, color: c.primary, fontWeight: '900'},
   });
 }
