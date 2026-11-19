@@ -8,7 +8,7 @@ import {palettes} from './src/theme/palettes';
 
 const tabs = [
   {id: 'Home', icon: '⌂'}, {id: 'Schedule', icon: '▦'},
-  {id: 'Tasks', icon: '✓'}, {id: 'Academics', icon: '▤'},
+  {id: 'Tasks', icon: '✓'}, {id: 'Budget', icon: '₱'},
   {id: 'Notes', icon: '✎'}, {id: 'Files', icon: '▧'},
   {id: 'Settings', icon: '⚙'},
 ];
@@ -20,6 +20,11 @@ export default function App() {
   const [subjects, setSubjects] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [notes, setNotes] = useState([]);
+  const [transactions, setTransactions] = useState([]);
+  const [monthlyLimit, setMonthlyLimit] = useState(0);
+  const [amount, setAmount] = useState('');
+  const [category, setCategory] = useState('Other');
+  const [budgetLimitDraft, setBudgetLimitDraft] = useState('');
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState('');
   const [detail, setDetail] = useState('');
@@ -32,11 +37,17 @@ export default function App() {
       query('SELECT * FROM subjects ORDER BY name'),
       query('SELECT * FROM tasks ORDER BY completed, id DESC'),
       query('SELECT * FROM notes ORDER BY pinned DESC, id DESC'),
+      query('SELECT * FROM budget_transactions ORDER BY occurred_at DESC, id DESC'),
+      query('SELECT limit_amount FROM monthly_budgets WHERE month = strftime(\'%Y-%m\', \'now\') LIMIT 1'),
     ]);
     setSummary(stats);
     setSubjects(subjectRows);
     setTasks(taskRows);
     setNotes(noteRows);
+    setTransactions(arguments.length ? noteRows : noteRows);
+    setTransactions(await query('SELECT * FROM budget_transactions ORDER BY occurred_at DESC, id DESC'));
+    const limits = await query("SELECT limit_amount FROM monthly_budgets WHERE month = strftime('%Y-%m', 'now') LIMIT 1");
+    setMonthlyLimit(limits[0]?.limit_amount || 0);
   };
 
   useEffect(() => {
@@ -56,20 +67,46 @@ export default function App() {
         await execute('INSERT INTO tasks (title, details) VALUES (?, ?)', [value, detail.trim()]);
       } else if (active === 'Notes') {
         await execute('INSERT INTO notes (title, body) VALUES (?, ?)', [value, detail.trim()]);
-      } else if (active === 'Academics') {
-        await execute('INSERT INTO subjects (name, code) VALUES (?, ?)', [value, detail.trim()]);
+      } else if (active === 'Budget') {
+        const numericAmount = Number(amount);
+        if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+          Alert.alert('Invalid amount', 'Enter an amount greater than zero.');
+          return;
+        }
+        await execute(
+          'INSERT INTO budget_transactions (title, amount, type, category, note) VALUES (?, ?, ?, ?, ?)',
+          [value, numericAmount, budgetType, category.trim() || 'Other', detail.trim()],
+        );
       } else {
         Alert.alert('Not available yet', 'This form is not available in this module yet.');
         return;
       }
       setDraft('');
       setDetail('');
+      setAmount('');
+      setCategory('Other');
       setShowForm(false);
       await refresh();
     } catch (error) {
       Alert.alert('Could not save', String(error));
     }
   };
+
+  const saveMonthlyLimit = async () => {
+    const value = Number(budgetLimitDraft);
+    if (!Number.isFinite(value) || value < 0) {
+      Alert.alert('Invalid budget', 'Enter a valid monthly budget limit.');
+      return;
+    }
+    await execute(
+      "INSERT INTO monthly_budgets (month, limit_amount) VALUES (strftime('%Y-%m', 'now'), ?) ON CONFLICT(month) DO UPDATE SET limit_amount = excluded.limit_amount, updated_at = CURRENT_TIMESTAMP",
+      [value],
+    );
+    setBudgetLimitDraft('');
+    await refresh();
+  };
+
+  const [budgetType, setBudgetType] = useState('expense');
 
   const toggleTask = async task => {
     await execute('UPDATE tasks SET completed = ? WHERE id = ?', [task.completed ? 0 : 1, task.id]);
@@ -126,8 +163,8 @@ export default function App() {
             </View>
           </View>
         ))}
-        {!subjects.length && <Empty>Add your first subject in Academics.</Empty>}
-        <Action label="Manage subjects" secondary onPress={() => setActive('Academics')} />
+        {!subjects.length && <Empty>Add subjects from the Schedule module.</Empty>}
+        <Action label="Manage subjects" secondary onPress={() => setActive('Schedule')} />
       </Card>
     </>
   );
@@ -155,7 +192,40 @@ export default function App() {
     if (active === 'Home') return renderHome();
     if (active === 'Tasks') return <>{renderList(tasks, 'Tasks')}<Action label="＋ Add task" onPress={() => setShowForm(true)} /></>;
     if (active === 'Notes') return <>{renderList(notes, 'Notes')}<Action label="＋ New note" onPress={() => setShowForm(true)} /></>;
-    if (active === 'Academics') return <>{renderList(subjects, 'Academics')}<Action label="＋ Add subject" onPress={() => setShowForm(true)} /></>;
+    if (active === 'Budget') {
+      const income = transactions.filter(item => item.type === 'income').reduce((sum, item) => sum + Number(item.amount), 0);
+      const expenses = transactions.filter(item => item.type === 'expense').reduce((sum, item) => sum + Number(item.amount), 0);
+      const remaining = monthlyLimit - expenses;
+      return <>
+        <View style={styles.statsGrid}>
+          <Card style={styles.statCard}><Text style={styles.statValue}>₱{income.toFixed(2)}</Text><Text style={styles.statLabel}>Income</Text></Card>
+          <Card style={styles.statCard}><Text style={styles.statValue}>₱{expenses.toFixed(2)}</Text><Text style={styles.statLabel}>Expenses</Text></Card>
+          <Card style={styles.statCard}><Text style={styles.statValue}>₱{(income - expenses).toFixed(2)}</Text><Text style={styles.statLabel}>Balance</Text></Card>
+          <Card style={styles.statCard}><Text style={[styles.statValue, remaining < 0 && {color: '#B84D4D'}]}>₱{remaining.toFixed(2)}</Text><Text style={styles.statLabel}>Budget remaining</Text></Card>
+        </View>
+        <Card>
+          <Heading>Monthly spending limit</Heading>
+          <Text style={styles.bodyText}>{monthlyLimit > 0 ? `₱${expenses.toFixed(2)} spent of ₱${monthlyLimit.toFixed(2)}` : 'Set a monthly limit to track your spending.'}</Text>
+          <TextInput value={budgetLimitDraft} onChangeText={setBudgetLimitDraft} keyboardType="decimal-pad" placeholder="Monthly limit (₱)" placeholderTextColor={colors.muted} style={styles.input} />
+          <Action label="Save monthly limit" onPress={saveMonthlyLimit} />
+        </Card>
+        <Card>
+          <Heading>Recent transactions</Heading>
+          {transactions.slice(0, 20).map(item => <View key={item.id} style={styles.listRow}>
+            <View style={{flex: 1}}>
+              <Text style={styles.rowTitle}>{item.title}</Text>
+              <Text style={styles.rowHint}>{item.category} · {item.type}</Text>
+            </View>
+            <Text style={[styles.rowTitle, {color: item.type === 'income' ? colors.primary : colors.text}]}>{item.type === 'income' ? '+' : '−'}₱{Number(item.amount).toFixed(2)}</Text>
+          </View>)}
+          {!transactions.length && <Empty>No income or expenses recorded yet.</Empty>}
+        </Card>
+        <View style={styles.formActions}>
+          <Action label="＋ Add expense" onPress={() => {setBudgetType('expense'); setShowForm(true);}} />
+          <Action label="＋ Add income" secondary onPress={() => {setBudgetType('income'); setShowForm(true);}} />
+        </View>
+      </>;
+    }
     if (active === 'Schedule') return <Card><Heading>Class schedule</Heading><Empty>Your weekly timetable will appear here when schedule management is implemented.</Empty><Action label="＋ Add class" onPress={() => Alert.alert('Schedule setup', 'Class editor is the next schedule implementation step.')} /></Card>;
     if (active === 'Files') return <Card><Heading>Lecture files</Heading><Empty>Organize your learning materials by subject. File importing and offline document viewing are scheduled for the next implementation phase.</Empty></Card>;
     return (
@@ -189,9 +259,13 @@ export default function App() {
       {showForm && (
         <View style={styles.formOverlay}>
           <View style={styles.formCard}>
-            <Text style={styles.heading}>{active === 'Academics' ? 'New subject' : active === 'Tasks' ? 'New task' : 'New note'}</Text>
-            <TextInput value={draft} onChangeText={setDraft} placeholder="Title" placeholderTextColor={colors.muted} style={styles.input} />
-            <TextInput value={detail} onChangeText={setDetail} placeholder={active === 'Academics' ? 'Subject code (optional)' : 'Details (optional)'} placeholderTextColor={colors.muted} style={styles.input} />
+            <Text style={styles.heading}>{active === 'Budget' ? (budgetType === 'income' ? 'Add income' : 'Add expense') : active === 'Tasks' ? 'New task' : 'New note'}</Text>
+            <TextInput value={draft} onChangeText={setDraft} placeholder={active === 'Budget' ? 'Transaction name' : 'Title'} placeholderTextColor={colors.muted} style={styles.input} />
+            {active === 'Budget' && <>
+              <TextInput value={amount} onChangeText={setAmount} keyboardType="decimal-pad" placeholder="Amount (₱)" placeholderTextColor={colors.muted} style={styles.input} />
+              <TextInput value={category} onChangeText={setCategory} placeholder="Category (e.g. Food, Transport, School)" placeholderTextColor={colors.muted} style={styles.input} />
+            </>}
+            <TextInput value={detail} onChangeText={setDetail} placeholder="Details (optional)" placeholderTextColor={colors.muted} style={styles.input} />
             <View style={styles.formActions}><Action label="Cancel" secondary onPress={() => setShowForm(false)} /><Action label="Save" onPress={addItem} /></View>
           </View>
         </View>
