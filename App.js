@@ -1490,11 +1490,17 @@ export default function App() {
   const budgetRemaining = monthlyLimit - expenses;
   const budgetProgress = monthlyLimit > 0 ? Math.min(100, Math.max(0, expenses / monthlyLimit * 100)) : 0;
   const pendingTasks = tasks.filter(task => !task.completed);
+  const todayKey = getLocalDateKey();
   const weekEnd = new Date();
   weekEnd.setHours(23, 59, 59, 999);
-  weekEnd.setDate(weekEnd.getDate() + (7 - weekEnd.getDay()));
-  const dueThisWeek = pendingTasks.filter(task => task.due_at && String(task.due_at).slice(0, 10) <= getLocalDateKey(weekEnd));
-  const overdueTasks = pendingTasks.filter(task => task.due_at && String(task.due_at).slice(0, 10) < getLocalDateKey());
+  weekEnd.setDate(weekEnd.getDate() + ((7 - weekEnd.getDay()) % 7));
+  const weekEndKey = getLocalDateKey(weekEnd);
+  const dueThisWeek = pendingTasks.filter(task => {
+    if (!task.due_at) return false;
+    const dueKey = String(task.due_at).slice(0, 10);
+    return dueKey >= todayKey && dueKey <= weekEndKey;
+  });
+  const overdueTasks = pendingTasks.filter(task => task.due_at && String(task.due_at).slice(0, 10) < todayKey);
   const savingsTargetTotal = savingsGoals.reduce((sum, goal) => sum + Math.max(0, Number(goal.target_amount) || 0), 0);
   const savingsCurrentTotal = savingsGoals.reduce((sum, goal) => sum + Math.max(0, Number(goal.saved_amount) || 0), 0);
   const savingsProgress = savingsTargetTotal > 0 ? Math.min(100, savingsCurrentTotal / savingsTargetTotal * 100) : 0;
