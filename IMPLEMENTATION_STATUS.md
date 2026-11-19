@@ -8,10 +8,11 @@ Initial React Native foundation committed to `main`.
 - Android native host files and Gradle configuration.
 - SQLite database initialization and initial schema for subjects, classes, tasks, notes, personal activities and settings.
 - Initial dashboard with live local counts.
-- Basic local creation for subjects, tasks and notes.
+- Basic local creation for tasks and notes; subject management will live inside Schedule.
+- Budget module foundation: local income/expense transactions and monthly spending limits.
 - Task completion toggle.
 - Forest, Sunset, Monochrome and Night palette selection (currently in-memory).
-- Main navigation shell for Home, Schedule, Tasks, Academics, Notes, Files and Settings.
+- Main navigation shell for Home, Schedule, Tasks, Budget, Notes, Files and Settings.
 - GitHub Actions debug APK workflow.
 
 ## Not yet verified
@@ -21,7 +22,7 @@ Initial React Native foundation committed to `main`.
 - SQLite native autolinking and Android build compatibility must be confirmed by CI.
 
 ## Known incomplete areas
-Schedule editor/timetable, file import/viewer, persistent theme settings, reminders/alarms, widgets, full backup/restore, data migration and comprehensive tests.
+Schedule editor/timetable and subject management, file import/viewer, persistent theme settings, reminders/alarms, widgets, full backup/restore, savings goals, data migration and comprehensive tests.
 
 ## Next action
 Inspect the first GitHub Actions run, fix failures using the actual logs, rebuild and verify the APK artifact before proceeding.
