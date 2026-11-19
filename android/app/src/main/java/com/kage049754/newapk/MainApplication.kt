@@ -13,7 +13,7 @@ class MainApplication : Application(), ReactApplication {
     override val reactNativeHost: ReactNativeHost =
         object : DefaultReactNativeHost(this) {
             override fun getPackages(): List<ReactPackage> =
-                PackageList(this).packages.apply { add(LectureFilesPackage()); add(ReminderPackage()); add(PlannerWidgetsPackage()) }
+                PackageList(this).packages.apply { add(LectureFilesPackage()); add(ReminderPackage()); add(PlannerWidgetsPackage()); add(BackupPackage()) }
 
             override fun getUseDeveloperSupport(): Boolean = BuildConfig.DEBUG
 

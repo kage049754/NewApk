@@ -162,3 +162,86 @@ export async function getDashboardSummary() {
     classes: classes[0]?.count || 0,
   };
 }
+const BACKUP_TABLES = {
+  subjects: ['id', 'code', 'name', 'room', 'professor', 'color', 'created_at'],
+  classes: ['id', 'subject_id', 'day_of_week', 'start_time', 'end_time', 'room', 'class_type'],
+  notes: ['id', 'subject_id', 'title', 'body', 'pinned', 'updated_at', 'category'],
+  tasks: ['id', 'title', 'details', 'due_at', 'priority', 'category', 'completed', 'checklist_json', 'note_id', 'created_at'],
+  activities: ['id', 'title', 'starts_at', 'ends_at', 'details'],
+  budget_transactions: ['id', 'title', 'amount', 'type', 'category', 'note', 'occurred_at'],
+  monthly_budgets: ['id', 'month', 'limit_amount', 'updated_at'],
+  category_budgets: ['id', 'month', 'category', 'limit_amount', 'updated_at'],
+  savings_goals: ['id', 'title', 'target_amount', 'saved_amount', 'target_date'],
+  settings: ['key', 'value'],
+};
+
+export async function createPlannerBackup() {
+  const tableNames = Object.keys(BACKUP_TABLES);
+  const rows = await Promise.all(tableNames.map(table => query('SELECT * FROM ' + table)));
+  const data = {};
+  tableNames.forEach((table, index) => { data[table] = rows[index]; });
+  const lectureFiles = await query('SELECT name, mime_type, size_bytes, category, imported_at FROM lecture_files ORDER BY imported_at DESC, id DESC');
+  return {
+    format: 'newapk-backup',
+    version: 1,
+    generatedAt: new Date().toISOString(),
+    data,
+    lectureFilesManifest: lectureFiles,
+  };
+}
+
+export async function restorePlannerBackup(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error('The backup data section is invalid.');
+  }
+
+  const tableNames = Object.keys(BACKUP_TABLES);
+  let totalRows = 0;
+  tableNames.forEach(table => {
+    const rows = data[table];
+    if (!Array.isArray(rows)) throw new Error('The backup is missing the ' + table + ' table.');
+    if (rows.length > 10000) throw new Error('The ' + table + ' table contains too many records.');
+    totalRows += rows.length;
+    rows.forEach((row, index) => {
+      if (!row || typeof row !== 'object' || Array.isArray(row)) {
+        throw new Error('Invalid ' + table + ' record at position ' + (index + 1) + '.');
+      }
+      BACKUP_TABLES[table].forEach(column => {
+        if (!Object.prototype.hasOwnProperty.call(row, column)) {
+          throw new Error('The ' + table + ' record is missing ' + column + '.');
+        }
+      });
+    });
+  });
+  if (totalRows > 30000) throw new Error('This backup contains more than 30,000 planner records.');
+
+  const db = await openDatabase();
+  const deleteOrder = [
+    'classes', 'tasks', 'notes', 'activities', 'budget_transactions',
+    'category_budgets', 'monthly_budgets', 'savings_goals', 'subjects', 'settings',
+  ];
+  const insertOrder = [
+    'subjects', 'notes', 'classes', 'tasks', 'activities',
+    'budget_transactions', 'monthly_budgets', 'category_budgets',
+    'savings_goals', 'settings',
+  ];
+
+  await db.transaction(async tx => {
+    // Keep imported files on this device, but detach their old subject IDs before replacing subjects.
+    await tx.executeSql('UPDATE lecture_files SET subject_id = NULL;');
+    for (const table of deleteOrder) {
+      await tx.executeSql('DELETE FROM ' + table + ';');
+    }
+    for (const table of insertOrder) {
+      const columns = BACKUP_TABLES[table];
+      const columnSql = columns.join(', ');
+      const placeholders = columns.map(() => '?').join(', ');
+      const sql = 'INSERT INTO ' + table + ' (' + columnSql + ') VALUES (' + placeholders + ')';
+      for (const row of data[table]) {
+        const values = columns.map(column => row[column] === undefined ? null : row[column]);
+        await tx.executeSql(sql, values);
+      }
+    }
+  });
+  return totalRows;
+}
