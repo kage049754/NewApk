@@ -37,16 +37,13 @@ export default function App() {
       query('SELECT * FROM subjects ORDER BY name'),
       query('SELECT * FROM tasks ORDER BY completed, id DESC'),
       query('SELECT * FROM notes ORDER BY pinned DESC, id DESC'),
-      query('SELECT * FROM budget_transactions ORDER BY occurred_at DESC, id DESC'),
-      query('SELECT limit_amount FROM monthly_budgets WHERE month = strftime(\'%Y-%m\', \'now\') LIMIT 1'),
     ]);
     setSummary(stats);
     setSubjects(subjectRows);
     setTasks(taskRows);
     setNotes(noteRows);
-    setTransactions(arguments.length ? noteRows : noteRows);
-    setTransactions(await query('SELECT * FROM budget_transactions ORDER BY occurred_at DESC, id DESC'));
-    const limits = await query("SELECT limit_amount FROM monthly_budgets WHERE month = strftime('%Y-%m', 'now') LIMIT 1");
+    setTransactions(await query("SELECT * FROM budget_transactions WHERE strftime('%Y-%m', occurred_at, 'localtime') = strftime('%Y-%m', 'now', 'localtime') ORDER BY occurred_at DESC, id DESC"));
+    const limits = await query("SELECT limit_amount FROM monthly_budgets WHERE month = strftime('%Y-%m', 'now', 'localtime') LIMIT 1");
     setMonthlyLimit(limits[0]?.limit_amount || 0);
   };
 
