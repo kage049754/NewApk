@@ -14,12 +14,18 @@ Initial React Native foundation committed to `main`.
 - Forest, Sunset, Monochrome and Night palette selection (currently in-memory).
 - Main navigation shell for Home, Schedule, Tasks, Budget, Notes, Files and Settings.
 - GitHub Actions debug APK workflow.
+- User-selected visual references for all seven modules documented in [UI_DESIGN_REFERENCES.md](UI_DESIGN_REFERENCES.md).
 
-## Not yet verified
-- No GitHub Actions build result has been inspected yet.
-- No APK artifact has been generated or verified.
+## Build verification
+- GitHub Actions run #12 for commit `b0ae2a1dbf46c6bc69d9f38a1c34305c83e415cb` completed successfully.
+- All build job steps completed successfully, including `Build debug APK` and `Upload APK`.
+- Artifact `NewApk-debug` was generated (33,193,946 bytes; SHA-256 `0ca49cfc50c46b59c7b9370cb9faf333caf0514f939cd562116f3f28258e3427`).
+- This confirms the debug APK artifact was produced; it does not confirm emulator launch, feature correctness, or physical-device behavior.
 - No emulator or physical-device test has been completed.
-- SQLite native autolinking and Android build compatibility must be confirmed by CI.
+
+## UI direction
+- Selected layouts: Home #3, Schedule #6, Tasks #8, Budget #9, Notepad #12, Lecture Files #14, Settings / Appearance #16.
+- These are implementation references only; the corresponding finished screens have not yet been built to match them.
 
 ## Known incomplete areas
 Schedule editor/timetable and subject management, file import/viewer, persistent theme settings, reminders/alarms, widgets, full backup/restore, savings goals, data migration and comprehensive tests.
