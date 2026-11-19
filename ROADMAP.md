@@ -27,7 +27,7 @@
 - [x] Add the offline lecture-file library, subject/category grouping, Android document picker, private file copies and external-app opening (CI/runtime verification pending).
 - [x] Implement cross-module dashboard refresh and local widget synchronization after planner data changes.
 - [x] Add optional local profile-name personalization to the Home greeting and avatar.
-- [ ] Complete remaining dashboard summary refinements.
+- [x] Add weekly due/overdue task and savings-goal snapshots to the Home dashboard; final visual refinement remains part of UI QA.
 - [x] Implement local notifications, class/task/activity reminders, sound/vibration, snooze/dismiss, boot/time-change rescheduling and exact-alarm access.
 - [ ] Test actual notification delivery, alarm sound/vibration, snooze/dismiss, reboot recovery and device-specific battery behavior.
 - [x] Implement seven Android home-screen widgets: Today&#39;s Classes, Weekly Schedule, Upcoming Tasks, Deadline Overview, Budget Overview, Savings Goals and Quick Expense.
@@ -40,6 +40,7 @@
 - [x] Add local profile-name personalization.
 - [x] Implement module-aware JSON backup/export and validated restore/import (Lecture File contents remain device-local).
 - [x] Add validated CampusOS Backup v1/v2 migration for full Homepage, Schedule, Tasks and Academics exports, including subject-linked notes and Base64 lecture files (up to 12 MB total).
+- [x] Add Jest unit tests for CampusOS backup conversion, malformed/partial input, timetable row validation and lecture attachment size limits.
 - [ ] Add automated unit and UI tests.
 - [ ] Verify emulator launch, persistence, navigation and notification behavior.
 - [ ] Prepare release APK and document physical-device testing separately.
@@ -47,4 +48,5 @@
 
 ## APK packaging
 - [x] Add a standalone QA APK with an embedded React Native bundle and CI signature verification.
+- [x] Download and inspect the run #47 standalone QA APK: archive integrity, DEX presence and embedded React Native bundle confirmed; CI signature check passed.
 - [ ] Prepare the production-signed release APK.

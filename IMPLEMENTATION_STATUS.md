@@ -223,3 +223,14 @@ Implement local reminder scheduling for classes, tasks and personal activities (
 - Downloaded standalone QA artifact `NewApk-standalone-qa` (artifact ID `14538210894`; ZIP artifact size 19,378,546 bytes). The extracted APK is 48,056,157 bytes; its React Native bundle is present at `assets/index.android.bundle` (985,048 bytes). Both the artifact ZIP and APK passed local archive-integrity checks.
 - Standalone APK SHA-256: `717c9f29f724f4349013b3aa3e84a72d63fac4d8109764dd55e0fa748956aa25`.
 - GitHub's `Verify standalone APK bundle and signature` step passed. This is a CI-signed QA build using the generated Android debug key, not a production-signed release. Emulator launch, data persistence and physical-device testing remain pending.
+
+
+## Home dashboard weekly task and savings snapshots
+- Added a weekly task snapshot showing the number of pending tasks due from today through the current week's Sunday, a separate overdue count, and navigation to Tasks.
+- Added a savings snapshot showing total saved versus combined target, overall progress and the first two individual goals. It reads the existing local SQLite savings-goal records; no duplicate dashboard data is stored.
+- The initial implementation passed migration tests, both APK builds, standalone bundle/signature checks and artifact upload in GitHub Actions run #46.
+- Review found that overdue tasks were included in the initial due-this-week count and Sunday incorrectly extended the range into the next week. Corrected the date window to include today through the current Sunday only; overdue tasks now appear only in the overdue count.
+- Corrected implementation commit `ca6fe0e6e204d62dc0e5714aef8a28c238b53978` passed all steps in GitHub Actions run #47, including migration tests, debug and standalone QA builds, embedded bundle/signature verification, both artifact uploads and runner cleanup.
+- Downloaded standalone QA artifact `NewApk-standalone-qa` (artifact ID `14540598014`; ZIP size 19,380,182 bytes). ZIP archive integrity passed; extracted `app-release.apk` is 48,057,485 bytes, contains `classes.dex` and `assets/index.android.bundle` (988,076 bytes), and passed APK ZIP integrity inspection.
+- Standalone QA APK SHA-256: `678895cdb2894c24f81fa045e846f668dc9a30d6033e1e73eb7d2390c76b7f53`.
+- GitHub CI's signature verification passed. This remains a QA build signed with the generated Android debug key, not a production-signed release. Emulator launch and physical-device behavior remain unverified.
