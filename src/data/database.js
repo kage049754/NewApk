@@ -3,13 +3,18 @@ import SQLite from 'react-native-sqlite-storage';
 SQLite.enablePromise(true);
 
 let database;
+let databaseOpenPromise;
 
 export async function openDatabase() {
   if (database) return database;
-  database = await SQLite.openDatabase({name: 'newapk.db', location: 'default'});
-  await database.executeSql('PRAGMA foreign_keys = ON;');
-  await database.transaction(async tx => {
-    await tx.executeSql(`CREATE TABLE IF NOT EXISTS subjects (
+  if (!databaseOpenPromise) {
+    databaseOpenPromise = (async () => {
+      const openedDatabase = await SQLite.openDatabase({name: 'newapk.db', location: 'default'});
+      // Keep schema setup as awaited standalone statements. The SQLite plugin's
+      // transaction callback is synchronous; awaiting tx.executeSql inside it
+      // lets the transaction commit before the next awaited statement is queued.
+      await openedDatabase.executeSql('PRAGMA foreign_keys = ON;');
+    await openedDatabase.executeSql(`CREATE TABLE IF NOT EXISTS subjects (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       code TEXT NOT NULL DEFAULT '',
       name TEXT NOT NULL,
@@ -18,7 +23,7 @@ export async function openDatabase() {
       color TEXT NOT NULL DEFAULT '#55745B',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );`);
-    await tx.executeSql(`CREATE TABLE IF NOT EXISTS classes (
+    await openedDatabase.executeSql(`CREATE TABLE IF NOT EXISTS classes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       subject_id INTEGER,
       day_of_week INTEGER NOT NULL,
@@ -28,7 +33,7 @@ export async function openDatabase() {
       class_type TEXT NOT NULL DEFAULT 'Lecture',
       FOREIGN KEY(subject_id) REFERENCES subjects(id) ON DELETE SET NULL
     );`);
-    await tx.executeSql(`CREATE TABLE IF NOT EXISTS tasks (
+    await openedDatabase.executeSql(`CREATE TABLE IF NOT EXISTS tasks (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       title TEXT NOT NULL,
       details TEXT NOT NULL DEFAULT '',
@@ -40,25 +45,25 @@ export async function openDatabase() {
       note_id INTEGER,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );`);
-    const [taskColumnInfo] = await tx.executeSql('PRAGMA table_info(tasks);');
+    const [taskColumnInfo] = await openedDatabase.executeSql('PRAGMA table_info(tasks);');
     const existingTaskColumns = [];
     for (let i = 0; i < taskColumnInfo.rows.length; i += 1) {
       existingTaskColumns.push(taskColumnInfo.rows.item(i).name);
     }
     if (!existingTaskColumns.includes('priority')) {
-      await tx.executeSql("ALTER TABLE tasks ADD COLUMN priority TEXT NOT NULL DEFAULT 'Medium';");
+      await openedDatabase.executeSql("ALTER TABLE tasks ADD COLUMN priority TEXT NOT NULL DEFAULT 'Medium';");
     }
     if (!existingTaskColumns.includes('category')) {
-      await tx.executeSql("ALTER TABLE tasks ADD COLUMN category TEXT NOT NULL DEFAULT 'Assignment';");
+      await openedDatabase.executeSql("ALTER TABLE tasks ADD COLUMN category TEXT NOT NULL DEFAULT 'Assignment';");
     }
     if (!existingTaskColumns.includes('checklist_json')) {
-      await tx.executeSql("ALTER TABLE tasks ADD COLUMN checklist_json TEXT NOT NULL DEFAULT '[]';");
+      await openedDatabase.executeSql("ALTER TABLE tasks ADD COLUMN checklist_json TEXT NOT NULL DEFAULT '[]';");
     }
     if (!existingTaskColumns.includes('note_id')) {
-      await tx.executeSql('ALTER TABLE tasks ADD COLUMN note_id INTEGER;');
+      await openedDatabase.executeSql('ALTER TABLE tasks ADD COLUMN note_id INTEGER;');
     }
-    await tx.executeSql('CREATE INDEX IF NOT EXISTS idx_tasks_due_completed ON tasks (due_at, completed);');
-    await tx.executeSql(`CREATE TABLE IF NOT EXISTS notes (
+    await openedDatabase.executeSql('CREATE INDEX IF NOT EXISTS idx_tasks_due_completed ON tasks (due_at, completed);');
+    await openedDatabase.executeSql(`CREATE TABLE IF NOT EXISTS notes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       subject_id INTEGER,
       title TEXT NOT NULL,
@@ -67,23 +72,23 @@ export async function openDatabase() {
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY(subject_id) REFERENCES subjects(id) ON DELETE SET NULL
     );`);
-    const [noteColumnInfo] = await tx.executeSql('PRAGMA table_info(notes);');
+    const [noteColumnInfo] = await openedDatabase.executeSql('PRAGMA table_info(notes);');
     const existingNoteColumns = [];
     for (let i = 0; i < noteColumnInfo.rows.length; i += 1) {
       existingNoteColumns.push(noteColumnInfo.rows.item(i).name);
     }
     if (!existingNoteColumns.includes('category')) {
-      await tx.executeSql("ALTER TABLE notes ADD COLUMN category TEXT NOT NULL DEFAULT 'General';");
+      await openedDatabase.executeSql("ALTER TABLE notes ADD COLUMN category TEXT NOT NULL DEFAULT 'General';");
     }
-    await tx.executeSql('CREATE INDEX IF NOT EXISTS idx_notes_pinned_updated ON notes (pinned, updated_at);');
-    await tx.executeSql(`CREATE TABLE IF NOT EXISTS activities (
+    await openedDatabase.executeSql('CREATE INDEX IF NOT EXISTS idx_notes_pinned_updated ON notes (pinned, updated_at);');
+    await openedDatabase.executeSql(`CREATE TABLE IF NOT EXISTS activities (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       title TEXT NOT NULL,
       starts_at TEXT,
       ends_at TEXT,
       details TEXT NOT NULL DEFAULT ''
     );`);
-    await tx.executeSql(`CREATE TABLE IF NOT EXISTS budget_transactions (
+    await openedDatabase.executeSql(`CREATE TABLE IF NOT EXISTS budget_transactions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       title TEXT NOT NULL,
       amount REAL NOT NULL CHECK(amount >= 0),
@@ -92,13 +97,13 @@ export async function openDatabase() {
       note TEXT NOT NULL DEFAULT '',
       occurred_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );`);
-    await tx.executeSql(`CREATE TABLE IF NOT EXISTS monthly_budgets (
+    await openedDatabase.executeSql(`CREATE TABLE IF NOT EXISTS monthly_budgets (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       month TEXT NOT NULL UNIQUE,
       limit_amount REAL NOT NULL CHECK(limit_amount >= 0),
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );`);
-    await tx.executeSql(`CREATE TABLE IF NOT EXISTS category_budgets (
+    await openedDatabase.executeSql(`CREATE TABLE IF NOT EXISTS category_budgets (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       month TEXT NOT NULL,
       category TEXT NOT NULL,
@@ -106,8 +111,8 @@ export async function openDatabase() {
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(month, category)
     );`);
-    await tx.executeSql('CREATE INDEX IF NOT EXISTS idx_budget_transactions_category_type ON budget_transactions (category, type);');
-    await tx.executeSql(`CREATE TABLE IF NOT EXISTS lecture_files (
+    await openedDatabase.executeSql('CREATE INDEX IF NOT EXISTS idx_budget_transactions_category_type ON budget_transactions (category, type);');
+    await openedDatabase.executeSql(`CREATE TABLE IF NOT EXISTS lecture_files (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       stored_path TEXT NOT NULL UNIQUE,
@@ -118,22 +123,27 @@ export async function openDatabase() {
       imported_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY(subject_id) REFERENCES subjects(id) ON DELETE SET NULL
     );`);
-    await tx.executeSql('CREATE INDEX IF NOT EXISTS idx_lecture_files_subject_imported ON lecture_files (subject_id, imported_at);');
-    await tx.executeSql(`CREATE TABLE IF NOT EXISTS savings_goals (
+    await openedDatabase.executeSql('CREATE INDEX IF NOT EXISTS idx_lecture_files_subject_imported ON lecture_files (subject_id, imported_at);');
+    await openedDatabase.executeSql(`CREATE TABLE IF NOT EXISTS savings_goals (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       title TEXT NOT NULL,
       target_amount REAL NOT NULL CHECK(target_amount > 0),
       saved_amount REAL NOT NULL DEFAULT 0 CHECK(saved_amount >= 0),
       target_date TEXT
     );`);
-    await tx.executeSql(`CREATE TABLE IF NOT EXISTS settings (
+    await openedDatabase.executeSql(`CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );`);
-  });
-  return database;
+      database = openedDatabase;
+      return database;
+    })().catch(error => {
+      databaseOpenPromise = null;
+      throw error;
+    });
+  }
+  return databaseOpenPromise;
 }
-
 export async function query(sql, params = []) {
   const db = await openDatabase();
   const [result] = await db.executeSql(sql, params);
@@ -233,16 +243,19 @@ export async function restorePlannerBackup(data, importedLectureFiles = [], repl
     'savings_goals', 'settings',
   ];
 
-  await db.transaction(async tx => {
+  // Queue every statement synchronously so the plugin can execute them
+  // inside one atomic transaction. Do not await tx.executeSql here: its
+  // Promise resolves on a later tick, after the transaction has finalized.
+  await db.transaction(tx => {
     // Legacy CampusOS imports preserve existing NewApk files. NewApk v2 restore
     // replaces file metadata atomically with the rest of the planner backup.
     if (replaceLectureFiles) {
-      await tx.executeSql('DELETE FROM lecture_files;');
+      tx.executeSql('DELETE FROM lecture_files;');
     } else {
-      await tx.executeSql('UPDATE lecture_files SET subject_id = NULL;');
+      tx.executeSql('UPDATE lecture_files SET subject_id = NULL;');
     }
     for (const table of deleteOrder) {
-      await tx.executeSql('DELETE FROM ' + table + ';');
+      tx.executeSql('DELETE FROM ' + table + ';');
     }
     for (const table of insertOrder) {
       const columns = BACKUP_TABLES[table];
@@ -251,11 +264,11 @@ export async function restorePlannerBackup(data, importedLectureFiles = [], repl
       const sql = 'INSERT INTO ' + table + ' (' + columnSql + ') VALUES (' + placeholders + ')';
       for (const row of data[table]) {
         const values = columns.map(column => row[column] === undefined ? null : row[column]);
-        await tx.executeSql(sql, values);
+        tx.executeSql(sql, values);
       }
     }
     for (const file of importedLectureFiles) {
-      await tx.executeSql(
+      tx.executeSql(
         'INSERT INTO lecture_files (name, stored_path, mime_type, size_bytes, subject_id, category) VALUES (?, ?, ?, ?, ?, ?)',
         [file.name, file.path, file.mimeType, Number(file.sizeBytes) || 0, Number(file.subjectId) > 0 ? Number(file.subjectId) : null, file.category || 'Lecture'],
       );
