@@ -9,6 +9,17 @@ REPORT_DIR=smoke-output
 TASK_TITLE=NewApkCiSmokeTask
 
 mkdir -p "$REPORT_DIR"
+capture_diagnostics() {
+  local exit_code=$?
+  trap - EXIT
+  adb shell screencap -p /sdcard/newapk-diagnostic.png >/dev/null 2>&1 || true
+  adb pull /sdcard/newapk-diagnostic.png "$REPORT_DIR/diagnostic-screen.png" >/dev/null 2>&1 || true
+  adb logcat -d -v threadtime > "$REPORT_DIR/logcat-full.txt" 2>/dev/null || true
+  adb shell dumpsys activity activities > "$REPORT_DIR/activities.txt" 2>/dev/null || true
+  adb shell dumpsys cpuinfo > "$REPORT_DIR/cpuinfo.txt" 2>/dev/null || true
+  exit "$exit_code"
+}
+trap capture_diagnostics EXIT
 if [[ ! -s "$APK_PATH" ]]; then
   echo "Standalone QA APK not found: $APK_PATH" >&2
   exit 1
@@ -21,8 +32,18 @@ adb install -r "$APK_PATH" | tee "$REPORT_DIR/install.txt"
 adb shell svc wifi disable >/dev/null 2>&1 || true
 adb shell svc data disable >/dev/null 2>&1 || true
 
+SCREEN_SIZE="$(adb shell wm size | grep -oE '[0-9]+x[0-9]+' | tail -n 1 | tr -d '\r')"
+SCREEN_WIDTH="$(echo "$SCREEN_SIZE" | cut -d x -f 1)"
+SCREEN_HEIGHT="$(echo "$SCREEN_SIZE" | cut -d x -f 2)"
+TAB_Y=$((SCREEN_HEIGHT * 96 / 100))
+NAV_RIGHT_X=$((SCREEN_WIDTH * 92 / 100))
+NAV_LEFT_X=$((SCREEN_WIDTH * 15 / 100))
+SCREEN_CENTER_X=$((SCREEN_WIDTH / 2))
+SCROLL_START_Y=$((SCREEN_HEIGHT * 80 / 100))
+SCROLL_END_Y=$((SCREEN_HEIGHT * 35 / 100))
+
 dump_ui() {
-  adb shell uiautomator dump --compressed /sdcard/newapk-window.xml >/dev/null 2>&1 || return 1
+  timeout 12s adb shell uiautomator dump --compressed /sdcard/newapk-window.xml >/dev/null 2>&1 || return 1
   adb pull /sdcard/newapk-window.xml "$REPORT_DIR/window.xml" >/dev/null 2>&1 || return 1
   [[ -s "$REPORT_DIR/window.xml" ]]
 }
@@ -46,11 +67,17 @@ PY
 
 ui_wait_text() {
   local needle="$1"
-  local attempts=15
+  local attempts=30
   if [[ "$#" -gt 1 ]]; then attempts="$2"; fi
   for attempt in $(seq 1 "$attempts"); do
-    if dump_ui && ui_has_text "$needle"; then
-      return 0
+    if dump_ui; then
+      if ui_has_text "Pixel Launcher isn't responding"; then
+        # Ask Android to wait for a transient launcher ANR, then retry the app assertion.
+        ui_click_text "Wait" bottom || true
+        sleep 2
+      elif ui_has_text "$needle"; then
+        return 0
+      fi
     fi
     sleep 1
   done
@@ -186,20 +213,20 @@ verify_tab "Files" "Keep your study files close."
 
 # Settings may sit beyond the first visible portion of the horizontal tab bar.
 dump_ui
-adb shell input swipe 1350 3030 220 3030 350
+adb shell input swipe "$NAV_RIGHT_X" "$TAB_Y" "$NAV_LEFT_X" "$TAB_Y" 450
 dump_ui
 ui_click_text "Settings" bottom
 # Scroll within Settings because the reminder section follows profile and appearance cards.
 for attempt in $(seq 1 8); do
   if dump_ui && ui_has_text "Notifications & reminders"; then break; fi
-  adb shell input swipe 720 2550 720 850 350
+  adb shell input swipe "$SCREEN_CENTER_X" "$SCROLL_START_Y" "$SCREEN_CENTER_X" "$SCROLL_END_Y" 450
 done
 ui_wait_text "Notifications & reminders"
 echo "PASS: Settings module rendered (Notifications & reminders)." | tee -a "$REPORT_DIR/navigation-results.txt"
 
 # Return to Home and keep a final screenshot/UI hierarchy for review.
 dump_ui
-adb shell input swipe 220 3030 1350 3030 350
+adb shell input swipe "$NAV_LEFT_X" "$TAB_Y" "$NAV_RIGHT_X" "$TAB_Y" 450
 dump_ui
 ui_click_text "Home" bottom
 ui_wait_text "Make today count."
