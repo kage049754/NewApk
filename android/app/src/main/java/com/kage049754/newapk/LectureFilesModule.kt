@@ -6,6 +6,7 @@ import android.database.Cursor
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.webkit.MimeTypeMap
+import android.util.Base64
 import androidx.core.content.FileProvider
 import com.facebook.react.bridge.ActivityEventListener
 import com.facebook.react.bridge.Arguments
@@ -202,6 +203,95 @@ class LectureFilesModule(
             promise.resolve(file.delete())
         } catch (error: Exception) {
             promise.reject("E_FILE_DELETE", error.message ?: "Could not delete the saved file.", error)
+        }
+    }
+
+    @ReactMethod
+    fun importBase64Files(payload: String, promise: Promise) {
+        val createdFiles = mutableListOf<File>()
+        try {
+            val entries = org.json.JSONArray(payload)
+            if (entries.length() > 500) {
+                promise.reject("E_LEGACY_FILE_COUNT", "A maximum of 500 legacy lecture files can be imported at once.")
+                return
+            }
+            val folder = File(context.filesDir, "lecture_files")
+            if (!folder.exists() && !folder.mkdirs()) {
+                promise.reject("E_STORAGE", "Could not create private lecture-file storage.")
+                return
+            }
+
+            val result = Arguments.createArray()
+            var totalBytes = 0L
+            for (index in 0 until entries.length()) {
+                val entry = entries.optJSONObject(index) ?: throw IllegalArgumentException("A legacy file entry is invalid.")
+                val encoded = entry.optString("data").replace(Regex("\\s"), "")
+                if (encoded.isBlank() || encoded.length % 4 != 0) {
+                    throw IllegalArgumentException("A legacy file contains invalid Base64 data.")
+                }
+                val bytes = try {
+                    Base64.decode(encoded, Base64.DEFAULT)
+                } catch (error: Exception) {
+                    throw IllegalArgumentException("A legacy file contains invalid Base64 data.", error)
+                }
+                totalBytes += bytes.size
+                if (totalBytes > 12L * 1024L * 1024L) {
+                    throw IllegalArgumentException("Legacy lecture-file contents exceed the 12 MB import limit.")
+                }
+
+                val sourceName = entry.optString("name", "campusos-file")
+                val displayName = sourceName.substringAfterLast('/').substringAfterLast('\\')
+                    .replace(Regex("[\\u0000-\\u001F]"), "_")
+                    .take(120)
+                    .ifBlank { "campusos-file" }
+                val extension = displayName.substringAfterLast('.', "")
+                    .filter { it.isLetterOrDigit() }
+                    .take(12)
+                    .lowercase()
+                val destination = File(folder, UUID.randomUUID().toString() + if (extension.isNotBlank()) ".$extension" else "")
+                try {
+                    destination.writeBytes(bytes)
+                } catch (error: Exception) {
+                    destination.delete()
+                    throw error
+                }
+                createdFiles.add(destination)
+
+                val fallbackMime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
+                    ?: "application/octet-stream"
+                val mimeType = entry.optString("mimeType").takeIf { it.isNotBlank() } ?: fallbackMime
+                val subjectId = entry.optLong("subjectId", 0L)
+                val resultEntry = Arguments.createMap().apply {
+                    putString("name", displayName)
+                    putString("path", destination.absolutePath)
+                    putString("mimeType", mimeType)
+                    putDouble("sizeBytes", bytes.size.toDouble())
+                    if (subjectId > 0L) putDouble("subjectId", subjectId.toDouble()) else putNull("subjectId")
+                    putString("category", entry.optString("category", "Lecture").ifBlank { "Lecture" })
+                }
+                result.pushMap(resultEntry)
+            }
+            promise.resolve(result)
+        } catch (error: Exception) {
+            createdFiles.forEach { runCatching { it.delete() } }
+            promise.reject("E_LEGACY_FILE_IMPORT", error.message ?: "Could not import CampusOS lecture files.", error)
+        }
+    }
+
+    @ReactMethod
+    fun deleteImportedFiles(pathsJson: String, promise: Promise) {
+        try {
+            val paths = org.json.JSONArray(pathsJson)
+            var deletedCount = 0
+            for (index in 0 until paths.length()) {
+                val path = paths.optString(index)
+                if (path.isBlank()) continue
+                val file = validatedPrivateFile(path)
+                if (file.exists() && file.delete()) deletedCount += 1
+            }
+            promise.resolve(deletedCount)
+        } catch (error: Exception) {
+            promise.reject("E_LEGACY_FILE_CLEANUP", error.message ?: "Could not remove temporary imported files.", error)
         }
     }
 

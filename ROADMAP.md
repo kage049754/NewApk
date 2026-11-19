@@ -37,7 +37,7 @@
 - [x] Add offline JSON backup and validated restore to Settings.
 - [ ] Complete the remaining settings modules, including profile, storage information and backup of actual Lecture File contents.
 - [x] Implement module-aware JSON backup/export and validated restore/import (Lecture File contents remain device-local).
-- [ ] Add migration support for existing CampusOS JSON backups where compatible.
+- [x] Add validated CampusOS Backup v1/v2 migration for full Homepage, Schedule, Tasks and Academics exports, including subject-linked notes and Base64 lecture files (up to 12 MB total).
 - [ ] Add automated unit and UI tests.
 - [ ] Verify emulator launch, persistence, navigation and notification behavior.
 - [ ] Prepare release APK and document physical-device testing separately.

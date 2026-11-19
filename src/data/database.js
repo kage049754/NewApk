@@ -190,10 +190,17 @@ export async function createPlannerBackup() {
   };
 }
 
-export async function restorePlannerBackup(data) {
+export async function restorePlannerBackup(data, importedLectureFiles = []) {
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
     throw new Error('The backup data section is invalid.');
   }
+  if (!Array.isArray(importedLectureFiles)) throw new Error('Imported Lecture Files data is invalid.');
+  if (importedLectureFiles.length > 500) throw new Error('This import contains too many Lecture Files.');
+  importedLectureFiles.forEach((file, index) => {
+    if (!file || typeof file !== 'object' || !file.name || !file.path || !file.mimeType) {
+      throw new Error('Invalid imported Lecture File at position ' + (index + 1) + '.');
+    }
+  });
 
   const tableNames = Object.keys(BACKUP_TABLES);
   let totalRows = 0;
@@ -241,6 +248,12 @@ export async function restorePlannerBackup(data) {
         const values = columns.map(column => row[column] === undefined ? null : row[column]);
         await tx.executeSql(sql, values);
       }
+    }
+    for (const file of importedLectureFiles) {
+      await tx.executeSql(
+        'INSERT INTO lecture_files (name, stored_path, mime_type, size_bytes, subject_id, category) VALUES (?, ?, ?, ?, ?, ?)',
+        [file.name, file.path, file.mimeType, Number(file.sizeBytes) || 0, Number(file.subjectId) > 0 ? Number(file.subjectId) : null, file.category || 'Lecture'],
+      );
     }
   });
   return totalRows;

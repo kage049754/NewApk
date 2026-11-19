@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import {createPlannerBackup, execute, getDashboardSummary, openDatabase, query, restorePlannerBackup} from './src/data/database';
 import {defaultCustomPalette, palettes} from './src/theme/palettes';
+import {convertCampusOsBackup} from './src/data/campusOsMigration';
 
 const tabs = [
   {id: 'Home', icon: '⌂'}, {id: 'Schedule', icon: '▦'},
@@ -659,6 +660,122 @@ export default function App() {
       );
     } catch (error) {
       Alert.alert('Could not read backup', String(error?.message || error));
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
+  const importCampusOsBackup = async () => {
+    if (backupBusy) return;
+    if (!NativeModules.LocalBackup?.pickBackup) {
+      Alert.alert('Import unavailable', 'The Android backup document picker is not available in this build.');
+      return;
+    }
+    setBackupBusy(true);
+    try {
+      const raw = await NativeModules.LocalBackup.pickBackup();
+      if (!raw) return;
+      let legacy;
+      try {
+        legacy = JSON.parse(raw);
+      } catch (_) {
+        Alert.alert('Invalid backup file', 'The selected file is not valid JSON.');
+        return;
+      }
+
+      let converted;
+      try {
+        converted = convertCampusOsBackup(legacy);
+      } catch (error) {
+        Alert.alert('CampusOS backup not supported', String(error?.message || error));
+        return;
+      }
+
+      const count = converted.counts;
+      const details = [
+        count.subjects + ' subjects',
+        count.classes + ' classes',
+        count.tasks + ' tasks',
+        count.notes + ' subject notes',
+        count.files + ' attached files',
+      ].join(', ');
+      Alert.alert(
+        'Import CampusOS backup?',
+        'Transfer ' + details + '? Schedule, Subjects, Tasks and subject-linked Notes will be replaced with the CampusOS data. Existing NewApk Budget records, savings goals, personal activities, app-only settings and Lecture Files will be preserved. CampusOS v2 does not export Budget transactions; app-lock PINs and profile photos are not imported. ' + converted.warnings.join(' '),
+        [
+          {text: 'Cancel', style: 'cancel'},
+          {text: 'Import and replace', style: 'destructive', onPress: async () => {
+            setBackupBusy(true);
+            let importedFiles = [];
+            try {
+              const [savedActivities, savedTransactions, savedMonthlyBudgets, savedCategoryBudgets, savedGoals, savedSettings] = await Promise.all([
+                query('SELECT * FROM activities ORDER BY id'),
+                query('SELECT * FROM budget_transactions ORDER BY id'),
+                query('SELECT * FROM monthly_budgets ORDER BY id'),
+                query('SELECT * FROM category_budgets ORDER BY id'),
+                query('SELECT * FROM savings_goals ORDER BY id'),
+                query('SELECT key, value FROM settings'),
+              ]);
+
+              // CampusOS v2 does not contain Budget or personal-activity records. Keep NewApk's
+              // existing versions of those tables instead of replacing them with empty arrays.
+              converted.data.activities = savedActivities;
+              converted.data.budget_transactions = savedTransactions;
+              converted.data.monthly_budgets = savedMonthlyBudgets;
+              converted.data.category_budgets = savedCategoryBudgets;
+              converted.data.savings_goals = savedGoals;
+
+              const mergedSettings = new Map(savedSettings.map(item => [item.key, item.value]));
+              converted.data.settings.forEach(item => mergedSettings.set(item.key, item.value));
+              converted.data.settings = Array.from(mergedSettings.entries()).map(([key, value]) => ({key, value}));
+
+              if (converted.legacyFiles.length) {
+                if (!NativeModules.LectureFiles?.importBase64Files) {
+                  throw new Error('This Android build cannot restore the attached CampusOS files. No planner records were changed.');
+                }
+                importedFiles = await NativeModules.LectureFiles.importBase64Files(JSON.stringify(converted.legacyFiles));
+              }
+
+              const restoredCount = await restorePlannerBackup(converted.data, importedFiles);
+              const restoredSettings = {};
+              converted.data.settings.forEach(item => { restoredSettings[item.key] = item.value; });
+              const restoredCustom = {...defaultCustomPalette};
+              const customValue = restoredSettings.appearance_custom_palette;
+              if (customValue) {
+                try {
+                  const parsed = JSON.parse(customValue);
+                  CUSTOM_COLOR_FIELDS.forEach(field => {
+                    if (isValidHexColor(parsed[field.key])) restoredCustom[field.key] = parsed[field.key];
+                  });
+                } catch (_) {}
+              }
+              setCustomPalette(restoredCustom);
+              setCustomPaletteDraft(restoredCustom);
+              const restoredPalette = restoredSettings.appearance_palette;
+              setPaletteName([...Object.keys(palettes), 'Custom'].includes(restoredPalette) ? restoredPalette : 'Forest');
+              setProfileName(String(restoredSettings.profile_name || '').trim());
+              setProfileNameDraft(String(restoredSettings.profile_name || '').trim());
+              setActive('Home');
+              await refresh();
+              Alert.alert(
+                'CampusOS import complete',
+                'Restored ' + count.subjects + ' subjects, ' + count.classes + ' classes, ' + count.tasks + ' tasks, ' + count.notes + ' notes and ' + importedFiles.length + ' lecture files. ' + savedTransactions.length + ' existing Budget transactions and ' + savedActivities.length + ' personal activities were preserved.',
+              );
+            } catch (error) {
+              if (importedFiles.length && NativeModules.LectureFiles?.deleteImportedFiles) {
+                try {
+                  await NativeModules.LectureFiles.deleteImportedFiles(JSON.stringify(importedFiles.map(file => file.path)));
+                } catch (_) {}
+              }
+              Alert.alert('CampusOS import failed', String(error?.message || error));
+            } finally {
+              setBackupBusy(false);
+            }
+          }},
+        ],
+      );
+    } catch (error) {
+      Alert.alert('Could not read CampusOS backup', String(error?.message || error));
     } finally {
       setBackupBusy(false);
     }
@@ -2208,9 +2325,10 @@ export default function App() {
           <Text style={styles.bodyText}>Save subjects, timetable, tasks and checklists, notes, activities, Budget records, savings goals, appearance and reminder settings to a JSON file. Restoring replaces current planner records after confirmation.</Text>
           <View style={styles.formActions}>
             <Action label={backupBusy ? 'Working…' : 'Export JSON backup'} onPress={exportPlannerData} />
-            <Action label="Restore backup" secondary onPress={importPlannerData} />
+            <Action label="Restore NewApk backup" secondary onPress={importPlannerData} />
           </View>
-          <Text style={styles.formSubtitle}>Imported Lecture Files stay on this device and their file contents are not included in the backup.</Text>
+          <Action label="Import CampusOS backup" secondary onPress={importCampusOsBackup} />
+          <Text style={styles.formSubtitle}>NewApk JSON backups keep Lecture File bytes on this device. CampusOS full backups can transfer supported files (up to 12 MB total) into this library.</Text>
         </Card>
         <Card><Heading>Data and privacy</Heading><Text style={styles.bodyText}>Your planner data is stored locally on this device. NewApk does not require an account or cloud database.</Text></Card>
         <Card><Heading>About NewApk</Heading><Text style={styles.bodyText}>React Native student productivity app · Offline-first</Text></Card>

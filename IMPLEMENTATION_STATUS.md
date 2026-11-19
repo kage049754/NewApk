@@ -181,3 +181,13 @@ Implement local reminder scheduling for classes, tasks and personal activities (
 - Added an optional preferred-name setting stored in the existing local `settings` table. The name appears in the Home greeting and app avatar.
 - Profile data is part of the existing JSON backup because it is stored in the settings table.
 - Profile UI and persistence build verification are pending.
+
+
+## CampusOS legacy backup migration
+- Added a dedicated importer for CampusOS Backup JSON formats v1 and v2. It verifies that Homepage, Schedule, Tasks and Academics were all selected; partial exports are rejected before any NewApk records are changed.
+- Converts subject IDs/codes, class days and times, Lecture/Lab types, professor/room details, tasks/deadlines/completion and subject-linked notes/favorites into the NewApk SQLite schema.
+- Copies Base64 subject-file attachments into private NewApk Lecture Files storage (12 MB total decoded-data limit) and links files to their migrated subjects. Failed imports remove any newly copied files.
+- Preserves NewApk Budget transactions, monthly/category limits, savings goals, personal activities, existing Lecture Files and app-only settings. CampusOS Backup v2 does not export Budget transactions or savings history.
+- Compatible profile-name and appearance settings are mapped. CampusOS app-lock PINs, profile photos, home-layout configuration and detailed timetable appearance settings are not imported.
+- Added Jest tests for data mapping, malformed JSON, partial backups, invalid timetable rows and attachment size limits. GitHub Actions now runs these tests before Android compilation.
+- Profile personalization build #39 for commit `853710217046fa69ad0648dfc71dc8ccad5071e2` succeeded; the migration commit requires a fresh test and Android build result.
