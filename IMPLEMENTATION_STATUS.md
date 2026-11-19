@@ -253,3 +253,14 @@ Implement local reminder scheduling for classes, tasks and personal activities (
 - Downloaded standalone QA artifact `NewApk-standalone-qa` (artifact ID `14542593629`; ZIP size 19,382,676 bytes). ZIP and extracted APK archive integrity checks passed. APK size: 48,060,025 bytes; `classes.dex` and `assets/index.android.bundle` (992,588 bytes) are present.
 - Standalone QA APK SHA-256: `065b2c42cb876232c6cdb515369cffd1e40ab3d761c8525d5a9c9bb08214d3a9`.
 - CI signature verification passed. This is a QA-signed APK, not a production-signed release. Weekly grid rendering, scrolling, class taps and persistence have not been emulator- or device-tested.
+
+
+## Home next-class dashboard highlight
+- Added a live Home summary that determines whether a class is currently in progress or which class starts next today. It shows subject, start/end time, class type/code and room, and opens Schedule directly in the current Day view when tapped.
+- Extracted the time selection into `getNextClassSummary` in `src/data/dashboardSummary.js`. It sorts valid class-time rows, ignores malformed or non-positive intervals, and distinguishes ongoing, upcoming, finished and empty timetables.
+- Added Jest tests for an ongoing class, earliest upcoming class selection, invalid time rows, finished day and empty timetable.
+- Run #54 for commit `531d7930fa2428e9ca7622e96bfe5329005b84bc` failed three new tests because the test file did not import `getNextClassSummary`; source inspection also found the clock regex had an extra escape. Existing migration tests still passed.
+- Corrected the test import and clock regex in commit `d9883cea86135168ad8a72d94dbdc81d58d2a07f`. GitHub Actions run #55 passed all 13 Jest tests, debug and standalone QA APK builds, embedded bundle/signature verification, both artifact uploads and runner cleanup.
+- Downloaded standalone QA artifact `NewApk-standalone-qa` (artifact ID `14554540447`; ZIP size 19,383,770 bytes). ZIP and APK archive integrity passed; APK size is 48,061,333 bytes and contains `classes.dex` plus `assets/index.android.bundle` (995,080 bytes).
+- Standalone QA APK SHA-256: `7a48eec17b60e59c823468b7cb855681c762a5c59d6f1012daf2209026fbc43b`.
+- CI signature verification passed. This is a QA APK signed with the generated Android debug key, not a production-signed release. The Home-to-Schedule tap and live current/next-class state still require emulator or physical-device runtime testing.
