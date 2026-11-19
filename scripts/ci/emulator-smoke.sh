@@ -7,6 +7,7 @@ PACKAGE_NAME=com.kage049754.newapk
 ACTIVITY_NAME="$PACKAGE_NAME/.MainActivity"
 REPORT_DIR=smoke-output
 TASK_TITLE=NewApkCiSmokeTask
+TEST_ACTIVITY_TITLE=NewApkCiReminderTest
 
 mkdir -p "$REPORT_DIR"
 capture_diagnostics() {
@@ -183,7 +184,7 @@ root = ET.parse(path).getroot()
 for node in root.iter():
     if node.attrib.get("class") != "android.widget.EditText":
         continue
-    if node.attrib.get("hint") != hint and node.attrib.get("text") != hint:
+    if node.attrib.get("hint") != hint and node.attrib.get("text") != hint and node.attrib.get("content-desc") != hint:
         continue
     match = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", node.attrib.get("bounds", ""))
     if not match:
@@ -216,6 +217,131 @@ verify_tab() {
   ui_click_text "$tab" bottom
   ui_wait_text "$expected"
   echo "PASS: $tab module rendered ($expected)." | tee -a "$REPORT_DIR/navigation-results.txt"
+}
+
+ui_click_switch_accessibility() {
+  local label="$1"
+  dump_ui || return 1
+  local coordinates
+  coordinates="$(python3 - "$REPORT_DIR/window.xml" "$label" <<'PY'
+import re
+import sys
+import xml.etree.ElementTree as ET
+
+path, label = sys.argv[1], sys.argv[2]
+root = ET.parse(path).getroot()
+for node in root.iter():
+    if node.attrib.get("content-desc") != label:
+        continue
+    if node.attrib.get("class") not in ("android.widget.Switch", "android.widget.CompoundButton"):
+        continue
+    match = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", node.attrib.get("bounds", ""))
+    if not match:
+        continue
+    x1, y1, x2, y2 = map(int, match.groups())
+    print((x1 + x2) // 2, (y1 + y2) // 2)
+    raise SystemExit(0)
+raise SystemExit(f"Accessible switch not found: {label}")
+PY
+)" || return 1
+  local x y
+  read -r x y <<< "$coordinates"
+  echo "SWITCH label=$label point=($x,$y)" | tee -a "$REPORT_DIR/tap-events.txt"
+  adb shell input tap "$x" "$y"
+}
+
+ui_scroll_to_text() {
+  local needle="$1"
+  local attempts=16
+  if [[ "$#" -gt 1 ]]; then attempts="$2"; fi
+  for attempt in $(seq 1 "$attempts"); do
+    if dump_ui && ui_has_text "$needle"; then
+      return 0
+    fi
+    adb shell input swipe "$SCREEN_CENTER_X" "$SCROLL_START_Y" "$SCREEN_CENTER_X" "$SCROLL_END_Y" 400
+    sleep 1
+  done
+  echo "Could not scroll to UI text: $needle" >&2
+  [[ -s "$REPORT_DIR/window.xml" ]] && cat "$REPORT_DIR/window.xml" >&2
+  return 1
+}
+
+ui_replace_accessible_input() {
+  local label="$1"
+  local value="$2"
+  ui_click_input_hint "$label"
+  adb shell input keyevent 123
+  for attempt in $(seq 1 16); do
+    adb shell input keyevent 67
+  done
+  adb shell input text "$value"
+}
+
+create_activity_reminder() {
+  # Use the emulator clock so the activity is always five minutes in the future
+  # in the same timezone that React Native and AlarmManager use.
+  local device_now
+  device_now="$(adb shell date '+%Y-%m-%d %H:%M' | tr -d '\r')"
+  local date_value start_value end_value
+  read -r date_value start_value end_value <<< "$(python3 - "$device_now" <<'PY'
+from datetime import datetime, timedelta
+import sys
+
+now = datetime.strptime(sys.argv[1], "%Y-%m-%d %H:%M")
+start = now + timedelta(minutes=5)
+end = start + timedelta(minutes=10)
+print(start.strftime("%Y-%m-%d"), start.strftime("%H:%M"), end.strftime("%H:%M"))
+PY
+)"
+  echo "REMINDER TEST: activity date=$date_value start=$start_value end=$end_value device_now=$device_now" | tee "$REPORT_DIR/reminder-test.txt"
+
+  ui_scroll_to_text "Personal activities"
+  ui_click_text "＋ Add activity"
+  ui_wait_text "New activity"
+  ui_replace_accessible_input "Activity name" "$TEST_ACTIVITY_TITLE"
+  ui_replace_accessible_input "Activity date" "$date_value"
+  ui_replace_accessible_input "Activity start time" "$start_value"
+  ui_replace_accessible_input "Activity end time" "$end_value"
+  adb shell input keyevent 4
+  dump_ui
+  ui_click_text "Save activity"
+  ui_wait_text "Personal activities"
+  ui_wait_text "$TEST_ACTIVITY_TITLE"
+  echo "PASS: future activity saved for reminder delivery." | tee -a "$REPORT_DIR/reminder-test.txt"
+}
+
+verify_reminder_delivery() {
+  # The emulator grants these permissions ahead of the in-app switch action.
+  # The app still requests/checks them through its normal React Native flow.
+  adb shell pm grant "$PACKAGE_NAME" android.permission.POST_NOTIFICATIONS
+  adb shell appops set "$PACKAGE_NAME" SCHEDULE_EXACT_ALARM allow >/dev/null 2>&1 || true
+  adb shell appops get "$PACKAGE_NAME" SCHEDULE_EXACT_ALARM > "$REPORT_DIR/exact-alarm-appop.txt" 2>&1 || true
+  adb shell dumpsys package "$PACKAGE_NAME" > "$REPORT_DIR/package-permissions.txt"
+
+  dump_ui
+  ui_click_text "Settings" bottom
+  ui_scroll_to_text "Notifications & reminders"
+  ui_wait_text "Enable reminders"
+  ui_click_switch_accessibility "Enable reminders"
+
+  local delivered=false
+  for attempt in $(seq 1 25); do
+    adb shell dumpsys notification --noredact > "$REPORT_DIR/notifications.txt"
+    if grep -Fq "Upcoming: $TEST_ACTIVITY_TITLE" "$REPORT_DIR/notifications.txt"; then
+      delivered=true
+      break
+    fi
+    sleep 1
+  done
+  adb shell dumpsys alarm > "$REPORT_DIR/alarms.txt"
+  if [[ "$delivered" != "true" ]]; then
+    adb logcat -d -v threadtime > "$REPORT_DIR/reminder-logcat-full.txt"
+    echo "Reminder notification was not found in Android notification records." >&2
+    grep -Ei "newapk|REMINDER|alarm" "$REPORT_DIR/alarms.txt" | tail -n 60 >&2 || true
+    grep -Ei "newapk|notification|alarm|REMINDER" "$REPORT_DIR/reminder-logcat-full.txt" | tail -n 100 >&2 || true
+    return 1
+  fi
+  echo "PASS: Android notification delivered for $TEST_ACTIVITY_TITLE." | tee -a "$REPORT_DIR/reminder-test.txt"
 }
 
 adb shell am start -W -n "$ACTIVITY_NAME" 2>&1 | tee "$REPORT_DIR/activity-start.txt"
@@ -258,6 +384,11 @@ fi
 printf 'NewApk process after relaunch: %s\n' "$PID" | tee -a "$REPORT_DIR/process.txt"
 ui_wait_text "1 tasks to finish"
 echo "PASS: locally saved task survived app force-stop and relaunch." | tee "$REPORT_DIR/persistence-result.txt"
+
+# Add an activity five minutes ahead, then enable reminders so the app's
+# existing catch-up logic schedules the notification within this CI run.
+create_activity_reminder
+verify_reminder_delivery
 
 # Visit every primary content module to catch navigation/render regressions.
 verify_tab "Schedule" "Weekly timetable"
@@ -310,4 +441,4 @@ if grep -Fq "Storage unavailable" "$REPORT_DIR/window.xml"; then
   exit 1
 fi
 
-echo "Standalone APK passed offline startup, SQLite task write, process-relaunch persistence and primary-module navigation checks; no fatal Android/React Native errors were logged." | tee "$REPORT_DIR/result.txt"
+echo "Standalone APK passed offline startup, SQLite task write, process-relaunch persistence, Android reminder notification delivery and primary-module navigation checks; no fatal Android/React Native errors were logged." | tee "$REPORT_DIR/result.txt"

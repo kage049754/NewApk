@@ -2463,14 +2463,14 @@ export default function App() {
               <Text style={styles.reminderSettingLabel}>Enable reminders</Text>
               <Text style={styles.reminderSettingHint}>Turn all local reminders on or off.</Text>
             </View>
-            <Switch value={reminderSettings.enabled} onValueChange={setAllRemindersEnabled} trackColor={{false: colors.border, true: colors.accent}} thumbColor={reminderSettings.enabled ? colors.primary : '#F4F4F4'} />
+            <Switch accessibilityLabel="Enable reminders" value={reminderSettings.enabled} onValueChange={setAllRemindersEnabled} trackColor={{false: colors.border, true: colors.accent}} thumbColor={reminderSettings.enabled ? colors.primary : '#F4F4F4'} />
           </View>
           <View style={styles.reminderSettingRow}>
             <View style={styles.reminderSettingInfo}>
               <Text style={styles.reminderSettingLabel}>Class reminders</Text>
               <Text style={styles.reminderSettingHint}>Repeat weekly before each scheduled class.</Text>
             </View>
-            <Switch value={reminderSettings.classesEnabled} onValueChange={value => saveReminderPreference('classesEnabled', value)} trackColor={{false: colors.border, true: colors.accent}} thumbColor={reminderSettings.classesEnabled ? colors.primary : '#F4F4F4'} />
+            <Switch accessibilityLabel="Class reminders" value={reminderSettings.classesEnabled} onValueChange={value => saveReminderPreference('classesEnabled', value)} trackColor={{false: colors.border, true: colors.accent}} thumbColor={reminderSettings.classesEnabled ? colors.primary : '#F4F4F4'} />
           </View>
           <Text style={styles.fieldLabel}>CLASS ADVANCE NOTICE</Text>
           <View style={styles.choiceRow}>
@@ -2485,7 +2485,7 @@ export default function App() {
               <Text style={styles.reminderSettingLabel}>Task deadline reminders</Text>
               <Text style={styles.reminderSettingHint}>Alert on the morning a task is due.</Text>
             </View>
-            <Switch value={reminderSettings.tasksEnabled} onValueChange={value => saveReminderPreference('tasksEnabled', value)} trackColor={{false: colors.border, true: colors.accent}} thumbColor={reminderSettings.tasksEnabled ? colors.primary : '#F4F4F4'} />
+            <Switch accessibilityLabel="Task deadline reminders" value={reminderSettings.tasksEnabled} onValueChange={value => saveReminderPreference('tasksEnabled', value)} trackColor={{false: colors.border, true: colors.accent}} thumbColor={reminderSettings.tasksEnabled ? colors.primary : '#F4F4F4'} />
           </View>
           <Text style={styles.fieldLabel}>DEADLINE ADVANCE NOTICE</Text>
           <View style={styles.choiceRow}>
@@ -2500,7 +2500,7 @@ export default function App() {
               <Text style={styles.reminderSettingLabel}>Activity reminders</Text>
               <Text style={styles.reminderSettingHint}>Alert before appointments and personal plans.</Text>
             </View>
-            <Switch value={reminderSettings.activitiesEnabled} onValueChange={value => saveReminderPreference('activitiesEnabled', value)} trackColor={{false: colors.border, true: colors.accent}} thumbColor={reminderSettings.activitiesEnabled ? colors.primary : '#F4F4F4'} />
+            <Switch accessibilityLabel="Activity reminders" value={reminderSettings.activitiesEnabled} onValueChange={value => saveReminderPreference('activitiesEnabled', value)} trackColor={{false: colors.border, true: colors.accent}} thumbColor={reminderSettings.activitiesEnabled ? colors.primary : '#F4F4F4'} />
           </View>
           <Text style={styles.fieldLabel}>ACTIVITY ADVANCE NOTICE</Text>
           <View style={styles.choiceRow}>
@@ -2515,14 +2515,14 @@ export default function App() {
               <Text style={styles.reminderSettingLabel}>Notification sound</Text>
               <Text style={styles.reminderSettingHint}>Use the device notification sound.</Text>
             </View>
-            <Switch value={reminderSettings.soundEnabled} onValueChange={value => saveReminderPreference('soundEnabled', value)} trackColor={{false: colors.border, true: colors.accent}} thumbColor={reminderSettings.soundEnabled ? colors.primary : '#F4F4F4'} />
+            <Switch accessibilityLabel="Notification sound" value={reminderSettings.soundEnabled} onValueChange={value => saveReminderPreference('soundEnabled', value)} trackColor={{false: colors.border, true: colors.accent}} thumbColor={reminderSettings.soundEnabled ? colors.primary : '#F4F4F4'} />
           </View>
           <View style={styles.reminderSettingRow}>
             <View style={styles.reminderSettingInfo}>
               <Text style={styles.reminderSettingLabel}>Vibration</Text>
               <Text style={styles.reminderSettingHint}>Vibrate when a reminder arrives.</Text>
             </View>
-            <Switch value={reminderSettings.vibrationEnabled} onValueChange={value => saveReminderPreference('vibrationEnabled', value)} trackColor={{false: colors.border, true: colors.accent}} thumbColor={reminderSettings.vibrationEnabled ? colors.primary : '#F4F4F4'} />
+            <Switch accessibilityLabel="Vibration" value={reminderSettings.vibrationEnabled} onValueChange={value => saveReminderPreference('vibrationEnabled', value)} trackColor={{false: colors.border, true: colors.accent}} thumbColor={reminderSettings.vibrationEnabled ? colors.primary : '#F4F4F4'} />
           </View>
           <Text style={styles.fieldLabel}>SNOOZE DURATION</Text>
           <View style={styles.choiceRow}>
@@ -2621,14 +2621,14 @@ export default function App() {
             <Text style={styles.heading}>{editingActivityId ? 'Edit activity' : 'New activity'}</Text>
             <Text style={styles.formSubtitle}>Add an appointment, errand or personal plan.</Text>
             <ScrollView style={styles.scheduleFormScroll} keyboardShouldPersistTaps="handled">
-              <TextInput value={activityTitleDraft} onChangeText={setActivityTitleDraft} placeholder="Activity name *" placeholderTextColor={colors.muted} style={styles.input} />
+              <TextInput value={activityTitleDraft} onChangeText={setActivityTitleDraft} placeholder="Activity name *" placeholderTextColor={colors.muted} style={styles.input} accessibilityLabel="Activity name" />
               <Text style={styles.fieldLabel}>DATE (YYYY-MM-DD)</Text>
-              <TextInput value={activityDateDraft} onChangeText={setActivityDateDraft} placeholder="2026-11-25" placeholderTextColor={colors.muted} style={styles.input} autoCapitalize="none" maxLength={10} />
+              <TextInput value={activityDateDraft} onChangeText={setActivityDateDraft} placeholder="2026-11-25" placeholderTextColor={colors.muted} style={styles.input} autoCapitalize="none" maxLength={10} accessibilityLabel="Activity date" />
               <Text style={styles.fieldLabel}>TIME (24-HOUR)</Text>
               <View style={styles.timeInputRow}>
-                <TextInput value={activityStartTimeDraft} onChangeText={setActivityStartTimeDraft} placeholder="09:00" placeholderTextColor={colors.muted} style={[styles.input, styles.timeInput]} keyboardType="numbers-and-punctuation" maxLength={5} />
+                <TextInput value={activityStartTimeDraft} onChangeText={setActivityStartTimeDraft} placeholder="09:00" placeholderTextColor={colors.muted} style={[styles.input, styles.timeInput]} keyboardType="numbers-and-punctuation" maxLength={5} accessibilityLabel="Activity start time" />
                 <Text style={styles.timeSeparator}>to</Text>
-                <TextInput value={activityEndTimeDraft} onChangeText={setActivityEndTimeDraft} placeholder="10:00" placeholderTextColor={colors.muted} style={[styles.input, styles.timeInput]} keyboardType="numbers-and-punctuation" maxLength={5} />
+                <TextInput value={activityEndTimeDraft} onChangeText={setActivityEndTimeDraft} placeholder="10:00" placeholderTextColor={colors.muted} style={[styles.input, styles.timeInput]} keyboardType="numbers-and-punctuation" maxLength={5} accessibilityLabel="Activity end time" />
               </View>
               <Text style={styles.formSubtitle}>The end time is optional. Leave it blank for an activity without a fixed end time.</Text>
               <Text style={styles.fieldLabel}>NOTES (OPTIONAL)</Text>
