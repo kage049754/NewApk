@@ -26,7 +26,8 @@
 - [ ] Implement complete dashboard aggregation and cross-module refresh.
 - [x] Implement local notifications, class/task/activity reminders, sound/vibration, snooze/dismiss, boot/time-change rescheduling and exact-alarm access.
 - [ ] Test actual notification delivery, alarm sound/vibration, snooze/dismiss, reboot recovery and device-specific battery behavior.
-- [ ] Implement Android home-screen widgets.
+- [x] Implement seven Android home-screen widgets: Today&#39;s Classes, Weekly Schedule, Upcoming Tasks, Deadline Overview, Budget Overview, Savings Goals and Quick Expense.
+- [ ] Test widget installation, launcher rendering, resize behavior, live refresh and Quick Expense handoff.
 - [x] Implement persistent Forest, Sunset, Monochrome and Night appearance presets.
 - [x] Add editable custom color combinations for backgrounds, cards, primary/accent, text and borders.
 - [ ] Complete the remaining settings modules, including notifications, alarms, privacy, storage and backup/restore.

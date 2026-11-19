@@ -110,3 +110,12 @@ Implement local reminder scheduling for classes, tasks and personal activities (
 - A pending task whose advance-notice time has passed but whose 8:00 AM deadline is still ahead now receives one immediate catch-up reminder.
 - Reminder settings and event data remain on-device. Runtime notification delivery, snooze, reboot and device-specific battery behavior still require emulator/physical-device testing.
 - The original reminder implementation passed GitHub Actions run #29 (commit `c989aad8c47518201e28ebdd934972e298b1a7bb`); the corrective changes here require a fresh build.
+
+
+## Android home-screen widgets
+- Added seven native Android home-screen widgets: Today&#39;s Classes, Weekly Schedule, Upcoming Tasks, Deadline Overview, Budget Overview, Savings Goals and Quick Expense.
+- Widgets read NewApk's existing private SQLite database (read-only) and display the active saved theme preset or custom colors.
+- A native refresh bridge updates installed widgets whenever the app reloads its SQLite records or the appearance changes.
+- Added widget deep links into Schedule, Tasks and Budget. Quick Expense opens the Budget expense form directly.
+- No backend or internet dependency is used. Installation, launcher rendering, resizing, live refresh and Quick Expense handoff still require emulator/physical-device testing.
+- Android CI build verification for this widget implementation is pending.

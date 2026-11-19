@@ -32,6 +32,48 @@
                 <action android:name="com.kage049754.newapk.REMINDER_DISMISS" />
             </intent-filter>
         </receiver>
+        <receiver android:name=".TodayClassesWidgetProvider" android:label="@string/widget_today_classes" android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_info_today_classes" />
+        </receiver>
+        <receiver android:name=".WeeklyScheduleWidgetProvider" android:label="@string/widget_weekly_schedule" android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_info_weekly_schedule" />
+        </receiver>
+        <receiver android:name=".UpcomingTasksWidgetProvider" android:label="@string/widget_upcoming_tasks" android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_info_upcoming_tasks" />
+        </receiver>
+        <receiver android:name=".DeadlineOverviewWidgetProvider" android:label="@string/widget_deadline_overview" android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_info_deadline_overview" />
+        </receiver>
+        <receiver android:name=".BudgetOverviewWidgetProvider" android:label="@string/widget_budget_overview" android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_info_budget_overview" />
+        </receiver>
+        <receiver android:name=".SavingsGoalsWidgetProvider" android:label="@string/widget_savings_goals" android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_info_savings_goals" />
+        </receiver>
+        <receiver android:name=".QuickExpenseWidgetProvider" android:label="@string/widget_quick_expense" android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_info_quick_expense" />
+        </receiver>
         <activity
             android:name=".MainActivity"
             android:label="NewApk"
@@ -42,6 +84,12 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="newapk" />
             </intent-filter>
         </activity>
     </application>

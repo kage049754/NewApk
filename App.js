@@ -1,6 +1,6 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import {
-  ActivityIndicator, Alert, AppState, NativeModules, PermissionsAndroid, Platform,
+  ActivityIndicator, Alert, AppState, Linking, NativeModules, PermissionsAndroid, Platform,
   SafeAreaView, ScrollView, StatusBar, StyleSheet, Switch, Text, TextInput,
   Pressable, View,
 } from 'react-native';
@@ -355,6 +355,9 @@ export default function App() {
         // Keep the planner usable if the optional Android reminder bridge is unavailable.
       }
     }
+    if (NativeModules.PlannerWidgets?.refreshAll) {
+      try { await NativeModules.PlannerWidgets.refreshAll(); } catch (_) {}
+    }
   };
 
   useEffect(() => {
@@ -392,6 +395,41 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const openWidgetDestination = url => {
+      if (!url || !String(url).startsWith('newapk://')) return;
+      const route = String(url).slice('newapk://'.length).split('?')[0].replace(/^\\/+|\\/+$/g, '');
+      setShowActivityForm(false);
+      setShowForm(false);
+      if (route === 'schedule' || route === 'schedule/today') {
+        setActive('Schedule');
+        setScheduleDay(new Date().getDay());
+      } else if (route === 'schedule/week') {
+        setActive('Schedule');
+      } else if (route === 'tasks/upcoming' || route === 'tasks/deadlines') {
+        setActive('Tasks');
+        setTaskFilter('Upcoming');
+      } else if (route === 'budget/add-expense') {
+        setActive('Budget');
+        setBudgetType('expense');
+        setBudgetFormMode('transaction');
+        setCategory('Other');
+        setDraft('');
+        setDetail('');
+        setAmount('');
+        setShowForm(true);
+      } else if (route === 'budget' || route === 'budget/savings') {
+        setActive('Budget');
+      } else {
+        setActive('Home');
+      }
+    };
+    let mounted = true;
+    Linking.getInitialURL().then(url => { if (mounted && url) openWidgetDestination(url); }).catch(() => {});
+    const subscription = Linking.addEventListener('url', event => openWidgetDestination(event.url));
+    return () => { mounted = false; subscription.remove(); };
+  }, []);
+
+  useEffect(() => {
     const subscription = AppState.addEventListener('change', nextState => {
       if (nextState === 'active') {
         refresh().catch(() => {});
@@ -401,6 +439,12 @@ export default function App() {
   }, []);
 
   const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  useEffect(() => {
+    if (NativeModules.PlannerWidgets?.refreshAll) {
+      NativeModules.PlannerWidgets.refreshAll().catch(() => {});
+    }
+  }, [paletteName, customPalette]);
 
   const saveReminderPreference = async (key, value) => {
     try {
