@@ -9,17 +9,43 @@ import {palettes} from './src/theme/palettes';
 const tabs = [
   {id: 'Home', icon: '⌂'}, {id: 'Schedule', icon: '▦'},
   {id: 'Tasks', icon: '✓'}, {id: 'Budget', icon: '₱'},
-  {id: 'Notes', icon: '✎'}, {id: 'Files', icon: '▧'},
+  {id: 'Notepad', icon: '✎'}, {id: 'Files', icon: '▧'},
   {id: 'Settings', icon: '⚙'},
 ];
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+function formatClock(value) {
+  if (!value) return '';
+  const parts = String(value).split(':');
+  const hour = Number(parts[0]);
+  const minute = parts[1] || '00';
+  if (!Number.isFinite(hour)) return String(value);
+  return (hour % 12 || 12) + ':' + minute.slice(0, 2) + (hour >= 12 ? ' PM' : ' AM');
+}
+
+function formatDate(value) {
+  if (!value) return '';
+  const parsed = new Date(String(value).replace(' ', 'T'));
+  if (Number.isNaN(parsed.getTime())) return String(value);
+  return MONTHS[parsed.getMonth()] + ' ' + parsed.getDate();
+}
+
+function greetingForHour(hour) {
+  if (hour < 12) return 'Good morning';
+  if (hour < 18) return 'Good afternoon';
+  return 'Good evening';
+}
 
 export default function App() {
   const [active, setActive] = useState('Home');
   const [paletteName, setPaletteName] = useState('Forest');
   const [summary, setSummary] = useState({subjects: 0, pendingTasks: 0, notes: 0, classes: 0});
   const [subjects, setSubjects] = useState([]);
+  const [todayClasses, setTodayClasses] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [notes, setNotes] = useState([]);
+  const [activities, setActivities] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [monthlyLimit, setMonthlyLimit] = useState(0);
   const [amount, setAmount] = useState('');
@@ -29,22 +55,32 @@ export default function App() {
   const [draft, setDraft] = useState('');
   const [detail, setDetail] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [budgetType, setBudgetType] = useState('expense');
   const colors = palettes[paletteName] || palettes.Forest;
 
   const refresh = async () => {
-    const [stats, subjectRows, taskRows, noteRows] = await Promise.all([
+    const dayOfWeek = new Date().getDay(); // Schedule convention: Sunday=0 through Saturday=6.
+    const [stats, subjectRows, taskRows, noteRows, classRows, activityRows, transactionRows, limitRows] = await Promise.all([
       getDashboardSummary(),
       query('SELECT * FROM subjects ORDER BY name'),
-      query('SELECT * FROM tasks ORDER BY completed, id DESC'),
+      query('SELECT * FROM tasks ORDER BY completed, CASE WHEN due_at IS NULL THEN 1 ELSE 0 END, due_at ASC, id DESC'),
       query('SELECT * FROM notes ORDER BY pinned DESC, id DESC'),
+      query(
+        'SELECT classes.*, subjects.name AS subject_name, subjects.code AS subject_code, subjects.color AS subject_color, subjects.room AS subject_room FROM classes LEFT JOIN subjects ON subjects.id = classes.subject_id WHERE classes.day_of_week = ? ORDER BY classes.start_time',
+        [dayOfWeek],
+      ),
+      query('SELECT * FROM activities WHERE starts_at IS NOT NULL ORDER BY starts_at ASC LIMIT 5'),
+      query("SELECT * FROM budget_transactions WHERE strftime('%Y-%m', occurred_at, 'localtime') = strftime('%Y-%m', 'now', 'localtime') ORDER BY occurred_at DESC, id DESC"),
+      query("SELECT limit_amount FROM monthly_budgets WHERE month = strftime('%Y-%m', 'now', 'localtime') LIMIT 1"),
     ]);
     setSummary(stats);
     setSubjects(subjectRows);
     setTasks(taskRows);
     setNotes(noteRows);
-    setTransactions(await query("SELECT * FROM budget_transactions WHERE strftime('%Y-%m', occurred_at, 'localtime') = strftime('%Y-%m', 'now', 'localtime') ORDER BY occurred_at DESC, id DESC"));
-    const limits = await query("SELECT limit_amount FROM monthly_budgets WHERE month = strftime('%Y-%m', 'now', 'localtime') LIMIT 1");
-    setMonthlyLimit(limits[0]?.limit_amount || 0);
+    setTodayClasses(classRows);
+    setActivities(activityRows);
+    setTransactions(transactionRows);
+    setMonthlyLimit(limitRows[0]?.limit_amount || 0);
   };
 
   useEffect(() => {
@@ -58,11 +94,14 @@ export default function App() {
 
   const addItem = async () => {
     const value = draft.trim();
-    if (!value) return;
+    if (!value) {
+      Alert.alert('Missing title', 'Enter a title before saving.');
+      return;
+    }
     try {
       if (active === 'Tasks') {
         await execute('INSERT INTO tasks (title, details) VALUES (?, ?)', [value, detail.trim()]);
-      } else if (active === 'Notes') {
+      } else if (active === 'Notepad') {
         await execute('INSERT INTO notes (title, body) VALUES (?, ?)', [value, detail.trim()]);
       } else if (active === 'Budget') {
         const numericAmount = Number(amount);
@@ -95,19 +134,25 @@ export default function App() {
       Alert.alert('Invalid budget', 'Enter a valid monthly budget limit.');
       return;
     }
-    await execute(
-      "INSERT INTO monthly_budgets (month, limit_amount) VALUES (strftime('%Y-%m', 'now', 'localtime'), ?) ON CONFLICT(month) DO UPDATE SET limit_amount = excluded.limit_amount, updated_at = CURRENT_TIMESTAMP",
-      [value],
-    );
-    setBudgetLimitDraft('');
-    await refresh();
+    try {
+      await execute(
+        "INSERT INTO monthly_budgets (month, limit_amount) VALUES (strftime('%Y-%m', 'now', 'localtime'), ?) ON CONFLICT(month) DO UPDATE SET limit_amount = excluded.limit_amount, updated_at = CURRENT_TIMESTAMP",
+        [value],
+      );
+      setBudgetLimitDraft('');
+      await refresh();
+    } catch (error) {
+      Alert.alert('Could not save budget', String(error));
+    }
   };
 
-  const [budgetType, setBudgetType] = useState('expense');
-
   const toggleTask = async task => {
-    await execute('UPDATE tasks SET completed = ? WHERE id = ?', [task.completed ? 0 : 1, task.id]);
-    await refresh();
+    try {
+      await execute('UPDATE tasks SET completed = ? WHERE id = ?', [task.completed ? 0 : 1, task.id]);
+      await refresh();
+    } catch (error) {
+      Alert.alert('Could not update task', String(error));
+    }
   };
 
   const Card = ({children, style}) => <View style={[styles.card, style]}>{children}</View>;
@@ -118,51 +163,163 @@ export default function App() {
     </Pressable>
   );
   const Empty = ({label}) => <Text style={styles.empty}>{label}</Text>;
+  const SectionTitle = ({title, action, onPress}) => (
+    <View style={styles.sectionTitleRow}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      {action ? <Pressable onPress={onPress}><Text style={styles.sectionAction}>{action}  ›</Text></Pressable> : null}
+    </View>
+  );
+
+  const income = transactions.filter(item => item.type === 'income').reduce((sum, item) => sum + Number(item.amount), 0);
+  const expenses = transactions.filter(item => item.type === 'expense').reduce((sum, item) => sum + Number(item.amount), 0);
+  const budgetRemaining = monthlyLimit - expenses;
+  const budgetProgress = monthlyLimit > 0 ? Math.min(100, Math.max(0, expenses / monthlyLimit * 100)) : 0;
+  const pendingTasks = tasks.filter(task => !task.completed);
+  const now = new Date();
+  const dateLabel = DAYS[now.getDay()] + ', ' + MONTHS[now.getMonth()] + ' ' + now.getDate();
 
   const renderHome = () => (
     <>
-      <View style={styles.hero}>
-        <Text style={styles.eyebrow}>YOUR STUDENT SPACE</Text>
+      <View style={styles.dashboardHero}>
+        <View style={styles.heroTopRow}>
+          <View>
+            <Text style={styles.heroEyebrow}>{dateLabel.toUpperCase()}</Text>
+            <Text style={styles.heroGreeting}>{greetingForHour(now.getHours())}</Text>
+          </View>
+          <View style={styles.heroAvatar}><Text style={styles.heroAvatarText}>N</Text></View>
+        </View>
         <Text style={styles.heroTitle}>Make today count.</Text>
-        <Text style={styles.heroSub}>Your classes, notes and tasks in one place.</Text>
+        <Text style={styles.heroSubtitle}>Your classes, plans, and progress at a glance.</Text>
+        <View style={styles.heroFooter}>
+          <Text style={styles.heroFooterText}>{summary.subjects} subjects</Text>
+          <View style={styles.heroFooterDot} />
+          <Text style={styles.heroFooterText}>{pendingTasks.length} tasks to finish</Text>
+        </View>
       </View>
-      <View style={styles.statsGrid}>
+
+      <View style={styles.quickActions}>
         {[
-          ['Classes', summary.classes], ['Subjects', summary.subjects],
-          ['To do', summary.pendingTasks], ['Notes', summary.notes],
-        ].map(([label, value]) => (
-          <Card key={label} style={styles.statCard}>
-            <Text style={styles.statValue}>{value}</Text>
-            <Text style={styles.statLabel}>{label}</Text>
-          </Card>
-        ))}
-      </View>
-      <Card>
-        <Heading>Upcoming tasks</Heading>
-        {tasks.filter(t => !t.completed).slice(0, 3).map(task => (
-          <Pressable key={task.id} onPress={() => toggleTask(task)} style={styles.listRow}>
-            <View style={styles.dot} />
-            <Text style={styles.rowTitle}>{task.title}</Text>
-            <Text style={styles.rowHint}>○</Text>
+          {label: 'Schedule', icon: '▦', screen: 'Schedule'},
+          {label: 'Add task', icon: '+', screen: 'Tasks'},
+          {label: 'Notepad', icon: '✎', screen: 'Notepad'},
+          {label: 'Budget', icon: '₱', screen: 'Budget'},
+        ].map(item => (
+          <Pressable key={item.label} onPress={() => {setActive(item.screen); setShowForm(item.screen === 'Tasks' || item.screen === 'Notepad');}} style={styles.quickAction}>
+            <View style={styles.quickIcon}><Text style={styles.quickIconText}>{item.icon}</Text></View>
+            <Text style={styles.quickLabel}>{item.label}</Text>
           </Pressable>
         ))}
-        {!tasks.some(t => !t.completed) && <Empty>No pending tasks yet.</Empty>}
-        <Action label="View tasks" secondary onPress={() => setActive('Tasks')} />
-      </Card>
-      <Card>
-        <Heading>Your subjects</Heading>
-        {subjects.slice(0, 4).map(subject => (
-          <View key={subject.id} style={styles.listRow}>
-            <View style={styles.subjectMark} />
-            <View style={{flex: 1}}>
-              <Text style={styles.rowTitle}>{subject.name}</Text>
-              {!!subject.code && <Text style={styles.rowHint}>{subject.code}</Text>}
-            </View>
+      </View>
+
+      <View style={styles.statsGrid}>
+        {[
+          {label: 'Classes today', value: todayClasses.length, tone: 'green'},
+          {label: 'Pending tasks', value: pendingTasks.length, tone: 'peach'},
+          {label: 'Subjects', value: subjects.length, tone: 'blue'},
+          {label: 'Notes saved', value: notes.length, tone: 'gold'},
+        ].map(item => (
+          <View key={item.label} style={[styles.statCard, styles['stat' + item.tone]]}>
+            <Text style={styles.statValue}>{item.value}</Text>
+            <Text style={styles.statLabel}>{item.label}</Text>
           </View>
         ))}
-        {!subjects.length && <Empty>Add subjects from the Schedule module.</Empty>}
-        <Action label="Manage subjects" secondary onPress={() => setActive('Schedule')} />
-      </Card>
+      </View>
+
+      <View style={styles.sectionBlock}>
+        <SectionTitle title="Today's classes" action="See schedule" onPress={() => setActive('Schedule')} />
+        <Card>
+          {todayClasses.length ? todayClasses.map(item => (
+            <View key={item.id} style={styles.classRow}>
+              <View style={styles.classTime}>
+                <Text style={styles.classStart}>{formatClock(item.start_time)}</Text>
+                <Text style={styles.classEnd}>{formatClock(item.end_time)}</Text>
+              </View>
+              <View style={[styles.classColor, {backgroundColor: item.subject_color || colors.primary}]} />
+              <View style={styles.classInfo}>
+                <Text style={styles.className}>{item.subject_name || 'Class'}</Text>
+                <Text style={styles.classMeta}>{item.subject_code || item.class_type || 'Scheduled class'}{item.class_type ? ' · ' + item.class_type : ''}</Text>
+                <Text style={styles.classRoom}>{item.room || item.subject_room || 'Room not set'}</Text>
+              </View>
+            </View>
+          )) : (
+            <View style={styles.emptySchedule}>
+              <View style={styles.emptyScheduleIcon}><Text style={styles.emptyScheduleGlyph}>▦</Text></View>
+              <Text style={styles.emptyScheduleTitle}>Nothing scheduled yet</Text>
+              <Text style={styles.emptyScheduleText}>Your classes for today will appear here.</Text>
+              <Action label="Open schedule" secondary onPress={() => setActive('Schedule')} />
+            </View>
+          )}
+        </Card>
+      </View>
+
+      <View style={styles.sectionBlock}>
+        <SectionTitle title="Your subjects" action="View all" onPress={() => setActive('Schedule')} />
+        {subjects.length ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.subjectStrip}>
+            {subjects.slice(0, 8).map((subject, index) => (
+              <Pressable key={subject.id} onPress={() => setActive('Schedule')} style={[styles.subjectTile, {backgroundColor: index % 2 === 0 ? colors.surface : colors.accent + '55', borderColor: colors.border}]}>
+                <View style={[styles.subjectTileMark, {backgroundColor: subject.color || colors.primary}]} />
+                <Text style={styles.subjectTileName} numberOfLines={2}>{subject.name}</Text>
+                <Text style={styles.subjectTileCode} numberOfLines={1}>{subject.code || 'Subject'}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        ) : (
+          <Card><Empty label="Your subjects will appear here after you add them to Schedule." /><Action label="Add subjects" secondary onPress={() => setActive('Schedule')} /></Card>
+        )}
+      </View>
+
+      <View style={styles.sectionBlock}>
+        <SectionTitle title="Tasks to finish" action="See all" onPress={() => setActive('Tasks')} />
+        <Card>
+          {pendingTasks.slice(0, 3).map(task => (
+            <Pressable key={task.id} onPress={() => toggleTask(task)} style={styles.taskRow}>
+              <View style={styles.check}><Text style={styles.checkText} /></View>
+              <View style={styles.taskInfo}>
+                <Text style={styles.taskTitle} numberOfLines={1}>{task.title}</Text>
+                <Text style={styles.taskDue}>{task.due_at ? 'Due ' + formatDate(task.due_at) : 'No deadline set'}</Text>
+              </View>
+              <Text style={styles.rowChevron}>›</Text>
+            </Pressable>
+          ))}
+          {!pendingTasks.length ? <Empty label="You are all caught up. Add a task when something needs your attention." /> : null}
+          <Action label="＋ Add task" onPress={() => {setActive('Tasks'); setShowForm(true);}} />
+        </Card>
+      </View>
+
+      <View style={styles.sectionBlock}>
+        <SectionTitle title="Budget snapshot" action="Open budget" onPress={() => setActive('Budget')} />
+        <Card>
+          <View style={styles.budgetSummaryRow}>
+            <View>
+              <Text style={styles.budgetCaption}>MONTHLY EXPENSES</Text>
+              <Text style={styles.budgetAmount}>₱{expenses.toFixed(2)}</Text>
+            </View>
+            <View style={styles.budgetBalance}>
+              <Text style={styles.budgetCaption}>BALANCE</Text>
+              <Text style={styles.budgetBalanceValue}>₱{(income - expenses).toFixed(2)}</Text>
+            </View>
+          </View>
+          <View style={styles.progressTrack}><View style={[styles.progressFill, {width: budgetProgress + '%'}]} /></View>
+          <Text style={styles.budgetFootnote}>{monthlyLimit > 0 ? '₱' + Math.max(0, budgetRemaining).toFixed(2) + ' remaining from your monthly limit' : 'Set a monthly limit to track your spending progress.'}</Text>
+        </Card>
+      </View>
+
+      <View style={styles.sectionBlock}>
+        <SectionTitle title="Personal activities" />
+        <Card>
+          {activities.slice(0, 3).map(activity => (
+            <View key={activity.id} style={styles.activityRow}>
+              <View style={styles.activityMark} />
+              <View style={styles.activityInfo}>
+                <Text style={styles.taskTitle}>{activity.title}</Text>
+                <Text style={styles.taskDue}>{formatDate(activity.starts_at)}</Text>
+              </View>
+            </View>
+          ))}
+          {!activities.length ? <Empty label="Personal appointments and activities will appear here." /> : null}
+        </Card>
+      </View>
     </>
   );
 
@@ -181,41 +338,40 @@ export default function App() {
           </View>
         </View>
       ))}
-      {!items.length && <Empty>No {type.toLowerCase()} added yet.</Empty>}
+      {!items.length && <Empty label={'No ' + type.toLowerCase() + ' added yet.'} />}
     </Card>
   );
 
   const renderContent = () => {
     if (active === 'Home') return renderHome();
     if (active === 'Tasks') return <>{renderList(tasks, 'Tasks')}<Action label="＋ Add task" onPress={() => setShowForm(true)} /></>;
-    if (active === 'Notes') return <>{renderList(notes, 'Notes')}<Action label="＋ New note" onPress={() => setShowForm(true)} /></>;
+    if (active === 'Notepad') return <>{renderList(notes, 'Notes')}<Action label="＋ New note" onPress={() => setShowForm(true)} /></>;
     if (active === 'Budget') {
-      const income = transactions.filter(item => item.type === 'income').reduce((sum, item) => sum + Number(item.amount), 0);
-      const expenses = transactions.filter(item => item.type === 'expense').reduce((sum, item) => sum + Number(item.amount), 0);
-      const remaining = monthlyLimit - expenses;
       return <>
         <View style={styles.statsGrid}>
-          <Card style={styles.statCard}><Text style={styles.statValue}>₱{income.toFixed(2)}</Text><Text style={styles.statLabel}>Income</Text></Card>
-          <Card style={styles.statCard}><Text style={styles.statValue}>₱{expenses.toFixed(2)}</Text><Text style={styles.statLabel}>Expenses</Text></Card>
-          <Card style={styles.statCard}><Text style={styles.statValue}>₱{(income - expenses).toFixed(2)}</Text><Text style={styles.statLabel}>Balance</Text></Card>
-          <Card style={styles.statCard}><Text style={[styles.statValue, remaining < 0 && {color: '#B84D4D'}]}>₱{remaining.toFixed(2)}</Text><Text style={styles.statLabel}>Budget remaining</Text></Card>
+          <View style={[styles.statCard, styles.statgreen]}><Text style={styles.statValue}>₱{income.toFixed(2)}</Text><Text style={styles.statLabel}>Income</Text></View>
+          <View style={[styles.statCard, styles.statpeach]}><Text style={styles.statValue}>₱{expenses.toFixed(2)}</Text><Text style={styles.statLabel}>Expenses</Text></View>
+          <View style={[styles.statCard, styles.statblue]}><Text style={styles.statValue}>₱{(income - expenses).toFixed(2)}</Text><Text style={styles.statLabel}>Balance</Text></View>
+          <View style={[styles.statCard, styles.statgold]}><Text style={styles.statValue}>₱{budgetRemaining.toFixed(2)}</Text><Text style={styles.statLabel}>Budget remaining</Text></View>
         </View>
         <Card>
           <Heading>Monthly spending limit</Heading>
-          <Text style={styles.bodyText}>{monthlyLimit > 0 ? `₱${expenses.toFixed(2)} spent of ₱${monthlyLimit.toFixed(2)}` : 'Set a monthly limit to track your spending.'}</Text>
+          <Text style={styles.bodyText}>{monthlyLimit > 0 ? '₱' + expenses.toFixed(2) + ' spent of ₱' + monthlyLimit.toFixed(2) : 'Set a monthly limit to track your spending.'}</Text>
           <TextInput value={budgetLimitDraft} onChangeText={setBudgetLimitDraft} keyboardType="decimal-pad" placeholder="Monthly limit (₱)" placeholderTextColor={colors.muted} style={styles.input} />
           <Action label="Save monthly limit" onPress={saveMonthlyLimit} />
         </Card>
         <Card>
           <Heading>Recent transactions</Heading>
-          {transactions.slice(0, 20).map(item => <View key={item.id} style={styles.listRow}>
-            <View style={{flex: 1}}>
-              <Text style={styles.rowTitle}>{item.title}</Text>
-              <Text style={styles.rowHint}>{item.category} · {item.type}</Text>
+          {transactions.slice(0, 20).map(item => (
+            <View key={item.id} style={styles.listRow}>
+              <View style={{flex: 1}}>
+                <Text style={styles.rowTitle}>{item.title}</Text>
+                <Text style={styles.rowHint}>{item.category} · {item.type}</Text>
+              </View>
+              <Text style={[styles.rowTitle, {color: item.type === 'income' ? colors.primary : colors.text}]}>{item.type === 'income' ? '+' : '−'}₱{Number(item.amount).toFixed(2)}</Text>
             </View>
-            <Text style={[styles.rowTitle, {color: item.type === 'income' ? colors.primary : colors.text}]}>{item.type === 'income' ? '+' : '−'}₱{Number(item.amount).toFixed(2)}</Text>
-          </View>)}
-          {!transactions.length && <Empty>No income or expenses recorded yet.</Empty>}
+          ))}
+          {!transactions.length ? <Empty label="No income or expenses recorded yet." /> : null}
         </Card>
         <View style={styles.formActions}>
           <Action label="＋ Add expense" onPress={() => {setBudgetType('expense'); setShowForm(true);}} />
@@ -223,22 +379,30 @@ export default function App() {
         </View>
       </>;
     }
-    if (active === 'Schedule') return <Card><Heading>Class schedule</Heading><Empty>Your weekly timetable will appear here when schedule management is implemented.</Empty><Action label="＋ Add class" onPress={() => Alert.alert('Schedule setup', 'Class editor is the next schedule implementation step.')} /></Card>;
-    if (active === 'Files') return <Card><Heading>Lecture files</Heading><Empty>Organize your learning materials by subject. File importing and offline document viewing are scheduled for the next implementation phase.</Empty></Card>;
+    if (active === 'Schedule') {
+      return <Card><Heading>Class schedule</Heading><Empty label="Your weekly timetable and subject management are the next Schedule implementation step." /><Action label="＋ Add class" onPress={() => Alert.alert('Schedule setup', 'The class editor will be added in the Schedule implementation step.')} /></Card>;
+    }
+    if (active === 'Files') return <Card><Heading>Lecture Files</Heading><Empty label="Organize PDFs, documents, and images by subject. File importing and offline viewing are planned." /></Card>;
     return (
       <>
-        <Card><Heading>Appearance</Heading><Text style={styles.bodyText}>Choose a color combination for the entire app.</Text>
-          {Object.keys(palettes).map(name => <Pressable key={name} onPress={() => setPaletteName(name)} style={styles.listRow}>
-            <View style={[styles.paletteDot, {backgroundColor: palettes[name].primary}]} />
-            <Text style={styles.rowTitle}>{name}</Text>
-            <Text style={styles.rowHint}>{paletteName === name ? 'Selected ✓' : 'Select'}</Text>
-          </Pressable>)}
+        <Card>
+          <Heading>Appearance</Heading>
+          <Text style={styles.bodyText}>Choose a color combination for the entire app.</Text>
+          {Object.keys(palettes).map(name => (
+            <Pressable key={name} onPress={() => setPaletteName(name)} style={styles.listRow}>
+              <View style={[styles.paletteDot, {backgroundColor: palettes[name].primary}]} />
+              <Text style={styles.rowTitle}>{name}</Text>
+              <Text style={styles.rowHint}>{paletteName === name ? 'Selected ✓' : 'Select'}</Text>
+            </Pressable>
+          ))}
         </Card>
         <Card><Heading>Data and privacy</Heading><Text style={styles.bodyText}>Your planner data is stored locally on this device. NewApk does not require an account or cloud database.</Text></Card>
         <Card><Heading>About NewApk</Heading><Text style={styles.bodyText}>React Native student productivity app · Offline-first</Text></Card>
       </>
     );
   };
+
+  const pageTitle = active === 'Home' ? '' : active === 'Files' ? 'Lecture Files' : active;
 
   if (loading) return <SafeAreaView style={[styles.loading, {backgroundColor: colors.background}]}><ActivityIndicator color={colors.primary} /><Text style={styles.muted}>Preparing your workspace…</Text></SafeAreaView>;
 
@@ -250,7 +414,7 @@ export default function App() {
         <View style={styles.avatar}><Text style={styles.avatarText}>N</Text></View>
       </View>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.pageTitle}>{active}</Text>
+        {!!pageTitle ? <Text style={styles.pageTitle}>{pageTitle}</Text> : null}
         {renderContent()}
       </ScrollView>
       {showForm && (
@@ -258,10 +422,10 @@ export default function App() {
           <View style={styles.formCard}>
             <Text style={styles.heading}>{active === 'Budget' ? (budgetType === 'income' ? 'Add income' : 'Add expense') : active === 'Tasks' ? 'New task' : 'New note'}</Text>
             <TextInput value={draft} onChangeText={setDraft} placeholder={active === 'Budget' ? 'Transaction name' : 'Title'} placeholderTextColor={colors.muted} style={styles.input} />
-            {active === 'Budget' && <>
+            {active === 'Budget' ? <>
               <TextInput value={amount} onChangeText={setAmount} keyboardType="decimal-pad" placeholder="Amount (₱)" placeholderTextColor={colors.muted} style={styles.input} />
               <TextInput value={category} onChangeText={setCategory} placeholder="Category (e.g. Food, Transport, School)" placeholderTextColor={colors.muted} style={styles.input} />
-            </>}
+            </> : null}
             <TextInput value={detail} onChangeText={setDetail} placeholder="Details (optional)" placeholderTextColor={colors.muted} style={styles.input} />
             <View style={styles.formActions}><Action label="Cancel" secondary onPress={() => setShowForm(false)} /><Action label="Save" onPress={addItem} /></View>
           </View>
@@ -269,10 +433,12 @@ export default function App() {
       )}
       <View style={styles.tabBar}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabContent}>
-          {tabs.map(tab => <Pressable key={tab.id} onPress={() => {setActive(tab.id); setShowForm(false);}} style={[styles.tab, active === tab.id && styles.activeTab]}>
-            <Text style={[styles.tabIcon, active === tab.id && styles.activeTabText]}>{tab.icon}</Text>
-            <Text style={[styles.tabLabel, active === tab.id && styles.activeTabText]}>{tab.id}</Text>
-          </Pressable>)}
+          {tabs.map(tab => (
+            <Pressable key={tab.id} onPress={() => {setActive(tab.id); setShowForm(false);}} style={[styles.tab, active === tab.id && styles.activeTab]}>
+              <Text style={[styles.tabIcon, active === tab.id && styles.activeTabText]}>{tab.icon}</Text>
+              <Text style={[styles.tabLabel, active === tab.id && styles.activeTabText]}>{tab.id === 'Notepad' ? 'Notes' : tab.id}</Text>
+            </Pressable>
+          ))}
         </ScrollView>
       </View>
     </SafeAreaView>
@@ -283,38 +449,92 @@ function makeStyles(c) {
   return StyleSheet.create({
     screen: {flex: 1, backgroundColor: c.background},
     loading: {flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12},
-    topBar: {paddingHorizontal: 20, paddingTop: 10, paddingBottom: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'},
+    topBar: {paddingHorizontal: 20, paddingTop: 10, paddingBottom: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'},
     brand: {fontSize: 22, fontWeight: '800', color: c.text, letterSpacing: -0.5},
     topCaption: {fontSize: 9, color: c.muted, letterSpacing: 1.5, marginTop: 2, fontWeight: '700'},
     avatar: {width: 38, height: 38, borderRadius: 14, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center'},
     avatarText: {color: c.primary, fontWeight: '800', fontSize: 16},
-    content: {paddingHorizontal: 18, paddingBottom: 24, gap: 14},
+    content: {paddingHorizontal: 18, paddingBottom: 24, gap: 17},
     pageTitle: {fontSize: 27, fontWeight: '800', color: c.text, letterSpacing: -0.7, marginTop: 4},
-    hero: {backgroundColor: c.primary, borderRadius: 24, padding: 22, minHeight: 155, justifyContent: 'center'},
-    eyebrow: {color: '#DCE8D8', fontSize: 9, letterSpacing: 1.8, fontWeight: '800'},
-    heroTitle: {color: '#FFFFFF', fontSize: 27, fontWeight: '800', marginTop: 10, letterSpacing: -0.7},
-    heroSub: {color: '#E4EDE1', fontSize: 13, marginTop: 6},
-    statsGrid: {flexDirection: 'row', flexWrap: 'wrap', gap: 10},
-    statCard: {width: '48%', flexGrow: 1, paddingVertical: 16},
-    card: {backgroundColor: c.surface, borderRadius: 20, padding: 16, borderWidth: 1, borderColor: c.border, gap: 10},
-    statValue: {fontSize: 25, fontWeight: '800', color: c.primary},
-    statLabel: {fontSize: 12, color: c.muted, fontWeight: '600'},
+    dashboardHero: {backgroundColor: c.primary, borderRadius: 25, padding: 21, minHeight: 190, justifyContent: 'space-between'},
+    heroTopRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'},
+    heroEyebrow: {color: '#DCE8D8', fontSize: 9, letterSpacing: 1.5, fontWeight: '800'},
+    heroGreeting: {color: '#FFFFFF', fontSize: 15, fontWeight: '700', marginTop: 5},
+    heroAvatar: {width: 38, height: 38, borderRadius: 14, backgroundColor: '#FFFFFF33', alignItems: 'center', justifyContent: 'center'},
+    heroAvatarText: {fontSize: 16, fontWeight: '800', color: '#FFFFFF'},
+    heroTitle: {color: '#FFFFFF', fontSize: 27, fontWeight: '800', marginTop: 19, letterSpacing: -0.7},
+    heroSubtitle: {color: '#E4EDE1', fontSize: 12, marginTop: 6},
+    heroFooter: {flexDirection: 'row', alignItems: 'center', marginTop: 18, gap: 8},
+    heroFooterText: {color: '#F4F7F1', fontSize: 10, fontWeight: '700'},
+    heroFooterDot: {width: 4, height: 4, borderRadius: 2, backgroundColor: '#DCE8D8'},
+    quickActions: {flexDirection: 'row', justifyContent: 'space-between', gap: 7},
+    quickAction: {flex: 1, alignItems: 'center', gap: 6},
+    quickIcon: {width: 46, height: 46, borderRadius: 16, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center'},
+    quickIconText: {fontSize: 19, color: c.primary, fontWeight: '800'},
+    quickLabel: {fontSize: 10, color: c.text, fontWeight: '700'},
+    statsGrid: {flexDirection: 'row', flexWrap: 'wrap', gap: 9},
+    statCard: {width: '48%', flexGrow: 1, borderRadius: 17, padding: 14, minHeight: 78, justifyContent: 'center'},
+    statgreen: {backgroundColor: c.accent + '65'},
+    statpeach: {backgroundColor: '#F3D8C8'},
+    statblue: {backgroundColor: '#D9E6E8'},
+    statgold: {backgroundColor: '#F0E5C8'},
+    statValue: {fontSize: 23, fontWeight: '800', color: c.text},
+    statLabel: {fontSize: 10, color: c.muted, fontWeight: '700', marginTop: 2},
+    sectionBlock: {gap: 9},
+    sectionTitleRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 2},
+    sectionTitle: {fontSize: 16, fontWeight: '800', color: c.text},
+    sectionAction: {fontSize: 11, color: c.primary, fontWeight: '800'},
+    card: {backgroundColor: c.surface, borderRadius: 20, padding: 15, borderWidth: 1, borderColor: c.border, gap: 10},
     heading: {fontSize: 16, fontWeight: '800', color: c.text},
     muted: {fontSize: 12, color: c.muted},
     bodyText: {fontSize: 13, color: c.muted, lineHeight: 20},
+    classRow: {flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 7, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border},
+    classTime: {width: 68},
+    classStart: {fontSize: 11, color: c.text, fontWeight: '800'},
+    classEnd: {fontSize: 9, color: c.muted, marginTop: 3},
+    classColor: {width: 4, alignSelf: 'stretch', borderRadius: 3},
+    classInfo: {flex: 1, paddingVertical: 2},
+    className: {fontSize: 13, color: c.text, fontWeight: '800'},
+    classMeta: {fontSize: 10, color: c.muted, marginTop: 3},
+    classRoom: {fontSize: 10, color: c.primary, fontWeight: '700', marginTop: 3},
+    emptySchedule: {alignItems: 'center', paddingVertical: 12, gap: 7},
+    emptyScheduleIcon: {width: 42, height: 42, borderRadius: 15, backgroundColor: c.accent + '66', alignItems: 'center', justifyContent: 'center'},
+    emptyScheduleGlyph: {fontSize: 20, color: c.primary},
+    emptyScheduleTitle: {fontSize: 13, color: c.text, fontWeight: '800'},
+    emptyScheduleText: {fontSize: 11, color: c.muted, textAlign: 'center'},
+    subjectStrip: {gap: 9, paddingRight: 8},
+    subjectTile: {width: 126, minHeight: 112, borderWidth: 1, borderRadius: 17, padding: 12, justifyContent: 'space-between'},
+    subjectTileMark: {width: 22, height: 5, borderRadius: 3},
+    subjectTileName: {fontSize: 12, lineHeight: 16, color: c.text, fontWeight: '800'},
+    subjectTileCode: {fontSize: 9, color: c.muted, fontWeight: '700'},
+    taskRow: {flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border},
+    check: {width: 21, height: 21, borderWidth: 1.5, borderColor: c.border, borderRadius: 7, alignItems: 'center', justifyContent: 'center'},
+    checked: {backgroundColor: c.primary, borderColor: c.primary},
+    checkText: {color: '#FFFFFF', fontSize: 12, fontWeight: '800'},
+    taskInfo: {flex: 1},
+    taskTitle: {fontSize: 12, color: c.text, fontWeight: '700'},
+    taskDue: {fontSize: 10, color: c.muted, marginTop: 3},
+    rowChevron: {fontSize: 22, color: c.muted},
+    budgetSummaryRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'},
+    budgetCaption: {fontSize: 9, letterSpacing: 1, color: c.muted, fontWeight: '800'},
+    budgetAmount: {fontSize: 21, color: c.text, fontWeight: '800', marginTop: 4},
+    budgetBalance: {alignItems: 'flex-end'},
+    budgetBalanceValue: {fontSize: 15, color: c.primary, fontWeight: '800', marginTop: 6},
+    progressTrack: {height: 8, backgroundColor: c.background, borderRadius: 5, overflow: 'hidden'},
+    progressFill: {height: 8, backgroundColor: c.primary, borderRadius: 5},
+    budgetFootnote: {fontSize: 10, color: c.muted},
+    activityRow: {flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 7},
+    activityMark: {width: 8, height: 8, borderRadius: 4, backgroundColor: c.primary},
+    activityInfo: {flex: 1},
     listRow: {flexDirection: 'row', alignItems: 'center', gap: 11, paddingVertical: 9, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border},
-    rowTitle: {fontSize: 13, color: c.text, fontWeight: '650', flex: 1},
+    rowTitle: {fontSize: 13, color: c.text, fontWeight: '600', flex: 1},
     rowHint: {fontSize: 11, color: c.muted},
-    dot: {width: 8, height: 8, borderRadius: 4, backgroundColor: c.primary},
     subjectMark: {width: 9, height: 28, borderRadius: 5, backgroundColor: c.accent},
     empty: {fontSize: 12, color: c.muted, paddingVertical: 12, lineHeight: 18},
     action: {backgroundColor: c.primary, borderRadius: 13, paddingVertical: 12, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center'},
     actionText: {color: '#FFFFFF', fontSize: 12, fontWeight: '800'},
     secondaryAction: {backgroundColor: c.background, borderWidth: 1, borderColor: c.border},
     secondaryActionText: {color: c.text},
-    check: {width: 22, height: 22, borderWidth: 1.5, borderColor: c.border, borderRadius: 7, alignItems: 'center', justifyContent: 'center'},
-    checked: {backgroundColor: c.primary, borderColor: c.primary},
-    checkText: {color: '#FFFFFF', fontSize: 13, fontWeight: '800'},
     strike: {textDecorationLine: 'line-through', color: c.muted},
     paletteDot: {width: 20, height: 20, borderRadius: 10},
     tabBar: {backgroundColor: c.surface, borderTopWidth: 1, borderTopColor: c.border, paddingVertical: 7},
