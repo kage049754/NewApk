@@ -96,7 +96,7 @@ export default function App() {
       return;
     }
     await execute(
-      "INSERT INTO monthly_budgets (month, limit_amount) VALUES (strftime('%Y-%m', 'now'), ?) ON CONFLICT(month) DO UPDATE SET limit_amount = excluded.limit_amount, updated_at = CURRENT_TIMESTAMP",
+      "INSERT INTO monthly_budgets (month, limit_amount) VALUES (strftime('%Y-%m', 'now', 'localtime'), ?) ON CONFLICT(month) DO UPDATE SET limit_amount = excluded.limit_amount, updated_at = CURRENT_TIMESTAMP",
       [value],
     );
     setBudgetLimitDraft('');
