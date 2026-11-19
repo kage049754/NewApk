@@ -584,7 +584,63 @@ export default function App() {
         {!!pageTitle ? <Text style={styles.pageTitle}>{pageTitle}</Text> : null}
         {renderContent()}
       </ScrollView>
-      {showForm && (
+      {showForm && active === 'Schedule' ? (
+        <View style={styles.formOverlay}>
+          <View style={styles.formCard}>
+            <Text style={styles.heading}>{scheduleFormType === 'subject' ? 'Add subject' : 'Add class'}</Text>
+            <Text style={styles.formSubtitle}>{scheduleFormType === 'subject' ? 'Create a subject for your timetable.' : 'Choose a subject and set its class time.'}</Text>
+            <ScrollView style={styles.scheduleFormScroll} keyboardShouldPersistTaps="handled">
+              {scheduleFormType === 'subject' ? (
+                <>
+                  <TextInput value={scheduleSubjectName} onChangeText={setScheduleSubjectName} placeholder="Subject name *" placeholderTextColor={colors.muted} style={styles.input} />
+                  <TextInput value={scheduleSubjectCode} onChangeText={setScheduleSubjectCode} placeholder="Subject code" placeholderTextColor={colors.muted} style={styles.input} />
+                  <TextInput value={scheduleSubjectRoom} onChangeText={setScheduleSubjectRoom} placeholder="Default room" placeholderTextColor={colors.muted} style={styles.input} />
+                  <TextInput value={scheduleProfessor} onChangeText={setScheduleProfessor} placeholder="Professor" placeholderTextColor={colors.muted} style={styles.input} />
+                  <TextInput value={scheduleSubjectColor} onChangeText={setScheduleSubjectColor} placeholder="Color (hex)" placeholderTextColor={colors.muted} style={styles.input} autoCapitalize="none" />
+                </>
+              ) : (
+                <>
+                  <Text style={styles.fieldLabel}>SUBJECT</Text>
+                  <View style={styles.choiceRow}>
+                    {subjects.map(subject => (
+                      <Pressable key={subject.id} onPress={() => setScheduleClassSubjectId(String(subject.id))} style={[styles.choiceChip, scheduleClassSubjectId === String(subject.id) && styles.choiceChipSelected]}>
+                        <Text style={[styles.choiceChipText, scheduleClassSubjectId === String(subject.id) && styles.choiceChipTextSelected]}>{subject.code || subject.name}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  <Text style={styles.fieldLabel}>DAY</Text>
+                  <View style={styles.choiceRow}>
+                    {[1, 2, 3, 4, 5, 6, 0].map(day => (
+                      <Pressable key={day} onPress={() => setScheduleClassDay(day)} style={[styles.choiceChip, scheduleClassDay === day && styles.choiceChipSelected]}>
+                        <Text style={[styles.choiceChipText, scheduleClassDay === day && styles.choiceChipTextSelected]}>{DAYS[day].slice(0, 3)}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  <Text style={styles.fieldLabel}>CLASS TIME (24-HOUR)</Text>
+                  <View style={styles.timeInputRow}>
+                    <TextInput value={scheduleStart} onChangeText={setScheduleStart} placeholder="08:00" placeholderTextColor={colors.muted} style={[styles.input, styles.timeInput]} keyboardType="numbers-and-punctuation" maxLength={5} />
+                    <Text style={styles.timeSeparator}>to</Text>
+                    <TextInput value={scheduleEnd} onChangeText={setScheduleEnd} placeholder="09:00" placeholderTextColor={colors.muted} style={[styles.input, styles.timeInput]} keyboardType="numbers-and-punctuation" maxLength={5} />
+                  </View>
+                  <TextInput value={scheduleClassRoom} onChangeText={setScheduleClassRoom} placeholder="Room (optional)" placeholderTextColor={colors.muted} style={styles.input} />
+                  <Text style={styles.fieldLabel}>CLASS TYPE</Text>
+                  <View style={styles.choiceRow}>
+                    {['Lecture', 'Lab'].map(type => (
+                      <Pressable key={type} onPress={() => setScheduleClassType(type)} style={[styles.choiceChip, scheduleClassType === type && styles.choiceChipSelected]}>
+                        <Text style={[styles.choiceChipText, scheduleClassType === type && styles.choiceChipTextSelected]}>{type}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </>
+              )}
+            </ScrollView>
+            <View style={styles.formActions}>
+              <Action label="Cancel" secondary onPress={() => setShowForm(false)} />
+              <Action label={scheduleFormType === 'subject' ? 'Save subject' : 'Save class'} onPress={addItem} />
+            </View>
+          </View>
+        </View>
+      ) : showForm ? (
         <View style={styles.formOverlay}>
           <View style={styles.formCard}>
             <Text style={styles.heading}>{active === 'Budget' ? (budgetType === 'income' ? 'Add income' : 'Add expense') : active === 'Tasks' ? 'New task' : 'New note'}</Text>
@@ -597,7 +653,7 @@ export default function App() {
             <View style={styles.formActions}><Action label="Cancel" secondary onPress={() => setShowForm(false)} /><Action label="Save" onPress={addItem} /></View>
           </View>
         </View>
-      )}
+      ) : null}
       <View style={styles.tabBar}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabContent}>
           {tabs.map(tab => (
@@ -715,5 +771,34 @@ function makeStyles(c) {
     formCard: {backgroundColor: c.surface, borderRadius: 22, padding: 18, gap: 12},
     input: {borderWidth: 1, borderColor: c.border, borderRadius: 12, paddingHorizontal: 13, paddingVertical: 11, color: c.text, fontSize: 14},
     formActions: {flexDirection: 'row', gap: 10, justifyContent: 'flex-end'},
+    scheduleHeaderRow: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'},
+    scheduleEyebrow: {fontSize: 9, color: c.muted, letterSpacing: 1.5, fontWeight: '800'},
+    scheduleHeading: {fontSize: 21, color: c.text, fontWeight: '800', marginTop: 3},
+    todayButton: {backgroundColor: c.accent + '66', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 9},
+    todayButtonText: {fontSize: 11, fontWeight: '800', color: c.primary},
+    weekdayStrip: {gap: 8, paddingVertical: 2, paddingRight: 8},
+    weekdayChip: {width: 48, height: 62, borderRadius: 15, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center', gap: 4},
+    weekdayChipSelected: {backgroundColor: c.primary, borderColor: c.primary},
+    weekdayLabel: {fontSize: 10, color: c.muted, fontWeight: '700'},
+    weekdayLabelSelected: {color: '#FFFFFF'},
+    weekdayNumber: {fontSize: 13, color: c.text, fontWeight: '800'},
+    weekdayNumberSelected: {color: '#FFFFFF'},
+    scheduleButtons: {flexDirection: 'row', gap: 9},
+    scheduleButtonFlex: {flex: 1},
+    classRemove: {width: 28, height: 28, borderRadius: 10, backgroundColor: c.background, alignItems: 'center', justifyContent: 'center'},
+    classRemoveText: {fontSize: 19, color: c.muted, lineHeight: 22},
+    subjectManageRow: {flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 9, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border},
+    subjectManageInfo: {flex: 1},
+    formSubtitle: {fontSize: 11, color: c.muted, marginTop: -5},
+    scheduleFormScroll: {maxHeight: 420},
+    fieldLabel: {fontSize: 9, letterSpacing: 1, color: c.muted, fontWeight: '800', marginTop: 5},
+    choiceRow: {flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginBottom: 5},
+    choiceChip: {backgroundColor: c.background, borderWidth: 1, borderColor: c.border, borderRadius: 10, paddingVertical: 9, paddingHorizontal: 12},
+    choiceChipSelected: {backgroundColor: c.primary, borderColor: c.primary},
+    choiceChipText: {fontSize: 10, color: c.text, fontWeight: '700'},
+    choiceChipTextSelected: {color: '#FFFFFF'},
+    timeInputRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
+    timeInput: {flex: 1}, 
+    timeSeparator: {fontSize: 11, color: c.muted},
   });
 }
