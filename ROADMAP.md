@@ -5,6 +5,7 @@
 - Offline-first: no backend, cloud database, sign-in, or network dependency for core planner data.
 - Excluded: attendance, calculator, study timer/Pomodoro, date calculator, unit converter, grade calculator, IT/CS utilities, exam reminders, student registration/login, announcements, group chat, group creation, group leadership, member search, online administration, invitation links/QR, admin approval, announcement images.
 - CampusOS-inspired Forest, Sunset, Monochrome and customizable appearance.
+- User-selected UI references for all seven modules are documented in [UI_DESIGN_REFERENCES.md](UI_DESIGN_REFERENCES.md); implement those layouts as the visual direction.
 
 - Standalone Academics tab removed; subjects remain managed through Schedule.
 - Budget is a primary navigation module.
