@@ -43,3 +43,8 @@ Task editing/checklists, personal activity CRUD, note editing/subject linking, b
 
 ## Next action
 Implement Budget #9 as a full spending overview with category summaries, monthly limits and savings goals, then inspect the next Android Actions result and verify its APK artifact.
+
+## Tasks build verification
+- GitHub Actions run #21 for commit `c0ac58192526f9f8f86db289cf364bbc802a6258` completed successfully; all job steps, including Android debug APK compilation and artifact upload, passed.
+- Artifact `NewApk-debug` was uploaded (33,193,948 bytes; artifact ID `14502746052`). This verifies build and upload only, not emulator launch or runtime behavior.
+- A source review caught and corrected an over-escaped due-date format validator in the follow-up commit; that correction requires its own passing build.

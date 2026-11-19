@@ -189,7 +189,7 @@ export default function App() {
       if (active === 'Tasks') {
         const dueDate = taskDueDate.trim();
         if (dueDate) {
-          if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(dueDate)) {
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
             Alert.alert('Invalid due date', 'Use YYYY-MM-DD, for example 2026-11-25.');
             return;
           }
