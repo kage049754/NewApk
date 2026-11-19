@@ -26,7 +26,8 @@
 - [x] Add monthly Budget CSV report export and automatic category-limit rollover (limits only; no balance carryover).
 - [x] Add the offline lecture-file library, subject/category grouping, Android document picker, private file copies and external-app opening (CI/runtime verification pending).
 - [x] Implement cross-module dashboard refresh and local widget synchronization after planner data changes.
-- [ ] Complete dashboard summaries and profile personalization.
+- [x] Add optional local profile-name personalization to the Home greeting and avatar.
+- [ ] Complete remaining dashboard summary refinements.
 - [x] Implement local notifications, class/task/activity reminders, sound/vibration, snooze/dismiss, boot/time-change rescheduling and exact-alarm access.
 - [ ] Test actual notification delivery, alarm sound/vibration, snooze/dismiss, reboot recovery and device-specific battery behavior.
 - [x] Implement seven Android home-screen widgets: Today&#39;s Classes, Weekly Schedule, Upcoming Tasks, Deadline Overview, Budget Overview, Savings Goals and Quick Expense.

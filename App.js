@@ -271,6 +271,8 @@ function makeTaskChecklist(draft, existing) {
 export default function App() {
   const [active, setActive] = useState('Home');
   const [paletteName, setPaletteName] = useState('Forest');
+  const [profileName, setProfileName] = useState('');
+  const [profileNameDraft, setProfileNameDraft] = useState('');
   const [customPalette, setCustomPalette] = useState({...defaultCustomPalette});
   const [customPaletteDraft, setCustomPaletteDraft] = useState({...defaultCustomPalette});
   const [summary, setSummary] = useState({subjects: 0, pendingTasks: 0, notes: 0, classes: 0});
@@ -408,8 +410,8 @@ export default function App() {
     openDatabase()
       .then(async () => {
         const savedAppearance = await query(
-          'SELECT key, value FROM settings WHERE key IN (?, ?)',
-          ['appearance_palette', 'appearance_custom_palette'],
+          'SELECT key, value FROM settings WHERE key IN (?, ?, ?)',
+          ['appearance_palette', 'appearance_custom_palette', 'profile_name'],
         );
         const savedValues = {};
         savedAppearance.forEach(item => { savedValues[item.key] = item.value; });
@@ -427,6 +429,9 @@ export default function App() {
         }
         setCustomPalette(restoredCustom);
         setCustomPaletteDraft(restoredCustom);
+        const savedProfileName = String(savedValues.profile_name || '').trim();
+        setProfileName(savedProfileName);
+        setProfileNameDraft(savedProfileName);
 
         const availablePalettes = [...Object.keys(palettes), 'Custom'];
         if (availablePalettes.includes(savedValues.appearance_palette)) {
@@ -656,6 +661,21 @@ export default function App() {
       Alert.alert('Could not read backup', String(error?.message || error));
     } finally {
       setBackupBusy(false);
+    }
+  };
+
+  const saveProfileName = async () => {
+    const nextName = profileNameDraft.trim().slice(0, 40);
+    try {
+      await execute(
+        'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+        ['profile_name', nextName],
+      );
+      setProfileName(nextName);
+      setProfileNameDraft(nextName);
+      Alert.alert('Profile saved', nextName ? 'Your dashboard greeting has been updated.' : 'Your profile name was cleared.');
+    } catch (error) {
+      Alert.alert('Could not save profile', String(error?.message || error));
     }
   };
 
@@ -1286,7 +1306,7 @@ export default function App() {
         <View style={styles.heroTopRow}>
           <View>
             <Text style={styles.heroEyebrow}>{dateLabel.toUpperCase()}</Text>
-            <Text style={styles.heroGreeting}>{greetingForHour(now.getHours())}</Text>
+            <Text style={styles.heroGreeting}>{greetingForHour(now.getHours())}{profileName ? ', ' + profileName : ''}</Text>
           </View>
           <View style={styles.heroAvatar}><Text style={styles.heroAvatarText}>N</Text></View>
         </View>
@@ -2025,6 +2045,21 @@ export default function App() {
     return (
       <>
         <Card>
+          <Heading>Profile</Heading>
+          <Text style={styles.bodyText}>Set the name shown in your dashboard greeting and app avatar. This stays on this device.</Text>
+          <TextInput
+            value={profileNameDraft}
+            onChangeText={setProfileNameDraft}
+            placeholder="Your preferred name"
+            placeholderTextColor={colors.muted}
+            style={styles.input}
+            maxLength={40}
+            returnKeyType="done"
+            onSubmitEditing={saveProfileName}
+          />
+          <Action label="Save profile" onPress={saveProfileName} />
+        </Card>
+        <Card>
           <Heading>Appearance</Heading>
           <Text style={styles.bodyText}>Choose a saved color combination for every module. Your selection stays on this device.</Text>
           {Object.keys(palettes).map(name => (
@@ -2192,7 +2227,7 @@ export default function App() {
       <StatusBar barStyle={(paletteName === 'Night' || (paletteName === 'Custom' && isDarkHexColor(colors.background))) ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
       <View style={styles.topBar}>
         <View><Text style={styles.brand}>NewApk</Text><Text style={styles.topCaption}>STUDENT WORKSPACE</Text></View>
-        <View style={styles.avatar}><Text style={styles.avatarText}>N</Text></View>
+        <View style={styles.avatar}><Text style={styles.avatarText}>{(profileName.trim().charAt(0) || 'N').toUpperCase()}</Text></View>
       </View>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {!!pageTitle ? <Text style={styles.pageTitle}>{pageTitle}</Text> : null}

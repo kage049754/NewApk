@@ -169,3 +169,15 @@ Implement local reminder scheduling for classes, tasks and personal activities (
 - Existing current-month category limits are never overwritten. The rollover does not transfer cash, transaction totals, unspent amounts or savings balances.
 - The rollover preference is saved in SQLite and is included in JSON backup/restore.
 - Build verification for CSV export and rollover is pending; document-picker behavior requires device testing.
+
+
+## APK artifact verification
+- Downloaded and extracted the `NewApk-debug` artifact from run #33. The archive contains `app-debug.apk` (108,101,492 bytes).
+- APK file identification succeeded, and DEX inspection confirmed all seven widget provider classes plus `PlannerWidgetsModule` are packaged.
+- SHA-256: `ac722e39fa5d70dd0bdae246dc87639f7489b95746d7736f7beb5a4286a9c103`.
+- This is static artifact inspection only; widget installation, launcher rendering, resizing, live refresh and deep-link interaction remain unverified on an emulator or physical device.
+
+## Profile personalization
+- Added an optional preferred-name setting stored in the existing local `settings` table. The name appears in the Home greeting and app avatar.
+- Profile data is part of the existing JSON backup because it is stored in the settings table.
+- Profile UI and persistence build verification are pending.
