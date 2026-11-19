@@ -282,6 +282,7 @@ export default function App() {
   const [todayClasses, setTodayClasses] = useState([]);
   const [allClasses, setAllClasses] = useState([]);
   const [scheduleDay, setScheduleDay] = useState(new Date().getDay());
+  const [scheduleView, setScheduleView] = useState('Week');
   const [scheduleFormType, setScheduleFormType] = useState('class');
   const [scheduleSubjectName, setScheduleSubjectName] = useState('');
   const [scheduleSubjectCode, setScheduleSubjectCode] = useState('');
@@ -1705,8 +1706,9 @@ export default function App() {
   );
 
   const renderSchedule = () => {
-    const visibleClasses = allClasses.filter(item => Number(item.day_of_week) === scheduleDay);
     const orderedDays = [1, 2, 3, 4, 5, 6, 0];
+    const visibleClasses = allClasses.filter(item => Number(item.day_of_week) === scheduleDay);
+    const todayDay = new Date().getDay();
     return (
       <>
         <View style={styles.scheduleHeaderRow}>
@@ -1714,50 +1716,105 @@ export default function App() {
             <Text style={styles.scheduleEyebrow}>YOUR WEEK</Text>
             <Text style={styles.scheduleHeading}>Class timetable</Text>
           </View>
-          <Pressable onPress={() => setScheduleDay(new Date().getDay())} style={styles.todayButton}>
+          <Pressable onPress={() => {setScheduleDay(todayDay); setScheduleView('Day');}} style={styles.todayButton}>
             <Text style={styles.todayButtonText}>Today</Text>
           </Pressable>
         </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.weekdayStrip}>
-          {orderedDays.map(day => (
-            <Pressable key={day} onPress={() => setScheduleDay(day)} style={[styles.weekdayChip, scheduleDay === day && styles.weekdayChipSelected]}>
-              <Text style={[styles.weekdayLabel, scheduleDay === day && styles.weekdayLabelSelected]}>{DAYS[day].slice(0, 3)}</Text>
-              <Text style={[styles.weekdayNumber, scheduleDay === day && styles.weekdayNumberSelected]}>{day === new Date().getDay() ? '•' : String(day + 1)}</Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-        <View style={styles.sectionBlock}>
-          <SectionTitle title={DAYS[scheduleDay] + ' classes'} />
-          <Card>
-            {visibleClasses.length ? visibleClasses.map(item => (
-              <View key={item.id} style={styles.classRow}>
-                <View style={styles.classTime}>
-                  <Text style={styles.classStart}>{formatClock(item.start_time)}</Text>
-                  <Text style={styles.classEnd}>{formatClock(item.end_time)}</Text>
-                </View>
-                <View style={[styles.classColor, {backgroundColor: item.subject_color || colors.primary}]} />
-                <View style={styles.classInfo}>
-                  <Text style={styles.className}>{item.subject_name || 'Unassigned subject'}</Text>
-                  <Text style={styles.classMeta}>{item.subject_code || 'No subject code'} · {item.class_type}</Text>
-                  <Text style={styles.classRoom}>{item.room || item.subject_room || 'Room not set'}</Text>
-                </View>
-                <Pressable onPress={() => removeClass(item)} style={styles.classRemove}>
-                  <Text style={styles.classRemoveText}>×</Text>
-                </Pressable>
-              </View>
-            )) : (
-              <View style={styles.emptySchedule}>
-                <View style={styles.emptyScheduleIcon}><Text style={styles.emptyScheduleGlyph}>▦</Text></View>
-                <Text style={styles.emptyScheduleTitle}>No classes on {DAYS[scheduleDay]}</Text>
-                <Text style={styles.emptyScheduleText}>Add a class to build your weekly timetable.</Text>
-              </View>
-            )}
-          </Card>
-          <View style={styles.scheduleButtons}>
-            <View style={styles.scheduleButtonFlex}><Action label="＋ Add class" onPress={() => openScheduleForm('class')} /></View>
-            <View style={styles.scheduleButtonFlex}><Action label="＋ Add subject" secondary onPress={() => openScheduleForm('subject')} /></View>
-          </View>
+
+        <View style={styles.scheduleViewToggle}>
+          <Pressable onPress={() => setScheduleView('Week')} style={[styles.scheduleViewOption, scheduleView === 'Week' && styles.scheduleViewOptionSelected]}>
+            <Text style={[styles.scheduleViewOptionText, scheduleView === 'Week' && styles.scheduleViewOptionTextSelected]}>Week view</Text>
+          </Pressable>
+          <Pressable onPress={() => setScheduleView('Day')} style={[styles.scheduleViewOption, scheduleView === 'Day' && styles.scheduleViewOptionSelected]}>
+            <Text style={[styles.scheduleViewOptionText, scheduleView === 'Day' && styles.scheduleViewOptionTextSelected]}>Day view</Text>
+          </Pressable>
         </View>
+
+        {scheduleView === 'Week' ? (
+          <View style={styles.sectionBlock}>
+            <SectionTitle title="Weekly timetable" action="View a day" onPress={() => setScheduleView('Day')} />
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.weekGridScroll}>
+              <View style={styles.weekGridRow}>
+                {orderedDays.map(day => {
+                  const dayClasses = allClasses.filter(item => Number(item.day_of_week) === day);
+                  const isToday = day === todayDay;
+                  return (
+                    <View key={day} style={styles.weekGridColumn}>
+                      <Pressable onPress={() => {setScheduleDay(day); setScheduleView('Day');}} style={[styles.weekGridDayHeader, isToday && styles.weekGridDayHeaderToday]}>
+                        <Text style={[styles.weekGridDayText, isToday && styles.weekGridDayTextToday]}>{DAYS[day]}</Text>
+                        <Text style={[styles.weekGridCountText, isToday && styles.weekGridCountTextToday]}>{dayClasses.length} {dayClasses.length === 1 ? 'class' : 'classes'}</Text>
+                      </Pressable>
+                      {dayClasses.map(item => (
+                        <Pressable
+                          key={item.id}
+                          onPress={() => {setScheduleDay(day); setScheduleView('Day');}}
+                          style={[styles.weekGridClassCard, {borderLeftColor: item.subject_color || colors.primary}]}
+                          accessibilityRole="button"
+                          accessibilityLabel={'View ' + (item.subject_name || 'class') + ' on ' + DAYS[day]}
+                        >
+                          <Text style={styles.weekGridClassTime}>{formatClock(item.start_time)} – {formatClock(item.end_time)}</Text>
+                          <Text style={styles.weekGridClassName} numberOfLines={2}>{item.subject_code || item.subject_name || 'Class'}</Text>
+                          <Text style={styles.weekGridClassMeta} numberOfLines={2}>{item.class_type || 'Class'} · {item.room || item.subject_room || 'Room not set'}</Text>
+                        </Pressable>
+                      ))}
+                      {!dayClasses.length ? (
+                        <View style={styles.weekGridEmpty}>
+                          <Text style={styles.weekGridEmptyText}>No classes</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  );
+                })}
+              </View>
+            </ScrollView>
+            <Text style={styles.formSubtitle}>Swipe horizontally to see all seven days. Tap a day or class to manage its timetable.</Text>
+          </View>
+        ) : (
+          <>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.weekdayStrip}>
+              {orderedDays.map(day => (
+                <Pressable key={day} onPress={() => setScheduleDay(day)} style={[styles.weekdayChip, scheduleDay === day && styles.weekdayChipSelected]}>
+                  <Text style={[styles.weekdayLabel, scheduleDay === day && styles.weekdayLabelSelected]}>{DAYS[day].slice(0, 3)}</Text>
+                  <Text style={[styles.weekdayNumber, scheduleDay === day && styles.weekdayNumberSelected]}>{day === todayDay ? '•' : String(day + 1)}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+            <View style={styles.sectionBlock}>
+              <SectionTitle title={DAYS[scheduleDay] + ' classes'} />
+              <Card>
+                {visibleClasses.length ? visibleClasses.map(item => (
+                  <View key={item.id} style={styles.classRow}>
+                    <View style={styles.classTime}>
+                      <Text style={styles.classStart}>{formatClock(item.start_time)}</Text>
+                      <Text style={styles.classEnd}>{formatClock(item.end_time)}</Text>
+                    </View>
+                    <View style={[styles.classColor, {backgroundColor: item.subject_color || colors.primary}]} />
+                    <View style={styles.classInfo}>
+                      <Text style={styles.className}>{item.subject_name || 'Unassigned subject'}</Text>
+                      <Text style={styles.classMeta}>{item.subject_code || 'No subject code'} · {item.class_type}</Text>
+                      <Text style={styles.classRoom}>{item.room || item.subject_room || 'Room not set'}</Text>
+                    </View>
+                    <Pressable onPress={() => removeClass(item)} style={styles.classRemove} accessibilityRole="button" accessibilityLabel={'Remove ' + (item.subject_name || 'class')}>
+                      <Text style={styles.classRemoveText}>×</Text>
+                    </Pressable>
+                  </View>
+                )) : (
+                  <View style={styles.emptySchedule}>
+                    <View style={styles.emptyScheduleIcon}><Text style={styles.emptyScheduleGlyph}>▦</Text></View>
+                    <Text style={styles.emptyScheduleTitle}>No classes on {DAYS[scheduleDay]}</Text>
+                    <Text style={styles.emptyScheduleText}>Add a class to build your weekly timetable.</Text>
+                  </View>
+                )}
+              </Card>
+            </View>
+          </>
+        )}
+
+        <View style={styles.scheduleButtons}>
+          <View style={styles.scheduleButtonFlex}><Action label="＋ Add class" onPress={() => openScheduleForm('class')} /></View>
+          <View style={styles.scheduleButtonFlex}><Action label="＋ Add subject" secondary onPress={() => openScheduleForm('subject')} /></View>
+        </View>
+
         <View style={styles.sectionBlock}>
           <SectionTitle title="My subjects" />
           <Card>
@@ -2819,6 +2876,26 @@ function makeStyles(c) {
     weekdayLabelSelected: {color: '#FFFFFF'},
     weekdayNumber: {fontSize: 13, color: c.text, fontWeight: '800'},
     weekdayNumberSelected: {color: '#FFFFFF'},
+    scheduleViewToggle: {flexDirection: 'row', alignSelf: 'flex-start', padding: 4, borderRadius: 13, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface, gap: 4},
+    scheduleViewOption: {paddingHorizontal: 14, paddingVertical: 8, borderRadius: 9},
+    scheduleViewOptionSelected: {backgroundColor: c.primary},
+    scheduleViewOptionText: {fontSize: 10, fontWeight: '800', color: c.muted},
+    scheduleViewOptionTextSelected: {color: '#FFFFFF'},
+    weekGridScroll: {paddingRight: 8},
+    weekGridRow: {flexDirection: 'row', gap: 9},
+    weekGridColumn: {width: 142, padding: 8, borderRadius: 16, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface},
+    weekGridDayHeader: {paddingHorizontal: 9, paddingVertical: 9, borderRadius: 11, backgroundColor: c.background, marginBottom: 8},
+    weekGridDayHeaderToday: {backgroundColor: c.primary},
+    weekGridDayText: {fontSize: 12, fontWeight: '800', color: c.text},
+    weekGridDayTextToday: {color: '#FFFFFF'},
+    weekGridCountText: {fontSize: 9, color: c.muted, marginTop: 2, fontWeight: '700'},
+    weekGridCountTextToday: {color: '#E8F1E9'},
+    weekGridClassCard: {backgroundColor: c.background, borderLeftWidth: 4, borderRadius: 10, padding: 8, marginBottom: 8, gap: 4},
+    weekGridClassTime: {fontSize: 9, fontWeight: '800', color: c.primary},
+    weekGridClassName: {fontSize: 11, fontWeight: '800', color: c.text},
+    weekGridClassMeta: {fontSize: 9, color: c.muted, lineHeight: 13},
+    weekGridEmpty: {minHeight: 66, borderWidth: 1, borderStyle: 'dashed', borderColor: c.border, borderRadius: 10, alignItems: 'center', justifyContent: 'center'},
+    weekGridEmptyText: {fontSize: 10, color: c.muted, fontWeight: '700'},
     scheduleButtons: {flexDirection: 'row', gap: 9},
     scheduleButtonFlex: {flex: 1},
     classRemove: {width: 28, height: 28, borderRadius: 10, backgroundColor: c.background, alignItems: 'center', justifyContent: 'center'},
