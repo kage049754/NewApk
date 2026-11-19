@@ -23,7 +23,7 @@
 - [x] Complete task editing, checklists and optional task-to-Notepad linking.
 - [x] Implement category spending analytics, monthly category limits and savings-goal tracking.
 - [x] Add budget transaction editing and deletion with dashboard/widget refresh.
-- [ ] Add exportable budget reports and category-limit rollover.
+- [x] Add monthly Budget CSV report export and automatic category-limit rollover (limits only; no balance carryover).
 - [x] Add the offline lecture-file library, subject/category grouping, Android document picker, private file copies and external-app opening (CI/runtime verification pending).
 - [x] Implement cross-module dashboard refresh and local widget synchronization after planner data changes.
 - [ ] Complete dashboard summaries and profile personalization.

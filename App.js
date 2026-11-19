@@ -324,6 +324,7 @@ export default function App() {
   const [transactions, setTransactions] = useState([]);
   const [monthlyLimit, setMonthlyLimit] = useState(0);
   const [categoryBudgets, setCategoryBudgets] = useState([]);
+  const [categoryRolloverEnabled, setCategoryRolloverEnabled] = useState(true);
   const [savingsGoals, setSavingsGoals] = useState([]);
   const [budgetLimitCategory, setBudgetLimitCategory] = useState('Food');
   const [categoryLimitDraft, setCategoryLimitDraft] = useState('');
@@ -346,6 +347,17 @@ export default function App() {
 
   const refresh = async () => {
     const dayOfWeek = new Date().getDay(); // Schedule convention: Sunday=0 through Saturday=6.
+    const rolloverRows = await query('SELECT value FROM settings WHERE key = ?', ['budget_category_rollover_enabled']);
+    const rolloverEnabled = rolloverRows[0]?.value !== 'false';
+    setCategoryRolloverEnabled(rolloverEnabled);
+    if (rolloverEnabled) {
+      await execute(
+        `INSERT OR IGNORE INTO category_budgets (month, category, limit_amount)
+         SELECT strftime('%Y-%m', 'now', 'localtime'), category, limit_amount
+         FROM category_budgets
+         WHERE month = strftime('%Y-%m', date('now', 'localtime', 'start of month', '-1 day'))`,
+      );
+    }
     const [stats, subjectRows, taskRows, noteRows, fileRows, classRows, activityRows, transactionRows, limitRows, categoryBudgetRows, savingsGoalRows, reminderRows] = await Promise.all([
       getDashboardSummary(),
       query('SELECT * FROM subjects ORDER BY name'),
@@ -830,6 +842,63 @@ export default function App() {
       await refresh();
     } catch (error) {
       Alert.alert('Could not save', String(error));
+    }
+  };
+
+  const saveCategoryRolloverPreference = async enabled => {
+    setCategoryRolloverEnabled(enabled);
+    try {
+      await execute(
+        'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+        ['budget_category_rollover_enabled', String(enabled)],
+      );
+      await refresh();
+    } catch (error) {
+      setCategoryRolloverEnabled(!enabled);
+      Alert.alert('Could not save rollover setting', String(error?.message || error));
+    }
+  };
+
+  const exportBudgetReport = async () => {
+    if (!NativeModules.LocalBackup?.saveTextDocument) {
+      Alert.alert('Report export unavailable', 'The Android document export service is not available in this build.');
+      return;
+    }
+    try {
+      const monthKey = getLocalDateKey().slice(0, 7);
+      const csvCell = value => '"' + String(value === null || value === undefined ? '' : value).replace(/"/g, '""') + '"';
+      const categoryRows = [...new Set([
+        ...EXPENSE_CATEGORIES,
+        ...transactions.filter(item => item.type === 'expense').map(item => String(item.category || 'Other')),
+      ])].sort().map(name => {
+        const spent = transactions.filter(item => item.type === 'expense' && String(item.category || 'Other') === name)
+          .reduce((sum, item) => sum + Number(item.amount), 0);
+        const limit = Number(categoryBudgets.find(item => item.category === name)?.limit_amount || 0);
+        return [name, spent.toFixed(2), limit ? limit.toFixed(2) : '', limit ? (limit - spent).toFixed(2) : ''];
+      }).filter(row => Number(row[1]) > 0 || row[2] !== '');
+      const reportRows = [
+        ['NewApk Budget Report', monthKey],
+        ['Income', income.toFixed(2)],
+        ['Expenses', expenses.toFixed(2)],
+        ['Balance', (income - expenses).toFixed(2)],
+        ['Monthly limit', monthlyLimit ? Number(monthlyLimit).toFixed(2) : 'Not set'],
+        ['Limit remaining', monthlyLimit ? (monthlyLimit - expenses).toFixed(2) : 'Not set'],
+        [],
+        ['Category', 'Spent', 'Limit', 'Remaining'],
+        ...categoryRows,
+        [],
+        ['Date', 'Type', 'Title', 'Category', 'Amount', 'Note'],
+        ...transactions.map(item => [item.occurred_at, item.type, item.title, item.category, Number(item.amount).toFixed(2), item.note]),
+      ];
+      const csv = reportRows.map(row => row.map(csvCell).join(',')).join(String.fromCharCode(10));
+      const result = await NativeModules.LocalBackup.saveTextDocument(
+        csv,
+        'text/csv',
+        'NewApk_Budget_Report_' + monthKey + '.csv',
+      );
+      if (result) Alert.alert('Budget report saved', 'The monthly CSV report was saved to your selected location.');
+    } catch (error) {
+      Alert.alert('Could not export Budget report', String(error?.message || error));
     }
   };
 
@@ -1738,6 +1807,19 @@ export default function App() {
         </View>
 
         <View style={styles.sectionBlock}>
+          <SectionTitle title="Category limit rollover" />
+          <Card>
+            <View style={styles.reminderSettingRow}>
+              <View style={styles.reminderSettingInfo}>
+                <Text style={styles.reminderSettingLabel}>Carry category limits into each new month</Text>
+                <Text style={styles.reminderSettingHint}>Copies last month's category caps for any category without a limit yet. It does not carry over cash, balances or spending.</Text>
+              </View>
+              <Switch value={categoryRolloverEnabled} onValueChange={saveCategoryRolloverPreference} trackColor={{false: colors.border, true: colors.accent}} thumbColor={categoryRolloverEnabled ? colors.primary : '#F4F4F4'} />
+            </View>
+          </Card>
+        </View>
+
+        <View style={styles.sectionBlock}>
           <SectionTitle title="Savings goals" action="＋ New goal" onPress={() => {
             setBudgetFormMode('goal');
             setShowForm(true);
@@ -1809,6 +1891,7 @@ export default function App() {
           </Card>
         </View>
 
+        <Action label="Export monthly CSV report" secondary onPress={exportBudgetReport} />
         <View style={styles.formActions}>
           <Action label="＋ Add expense" onPress={() => openTransactionForm(null, 'expense')} />
           <Action label="＋ Add income" secondary onPress={() => openTransactionForm(null, 'income')} />

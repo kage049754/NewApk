@@ -161,3 +161,11 @@ Implement local reminder scheduling for classes, tasks and personal activities (
 - Existing Lecture Files are not packaged because their private binary copies are device-local. Restore keeps those copies and clears their old subject associations to avoid linking them to unrelated restored subjects.
 - Settings restore the saved appearance preset/custom colors; a full data refresh rebuilds reminders and installed widget contents.
 - Backup/restore build verification is pending. Actual document-picker save and restore behavior requires emulator/physical-device testing.
+
+
+## Budget reports and category-limit rollover
+- Added a CSV export for the current month's Budget summary, category spending/limits, and transaction details using Android's user-selected document location.
+- Added an optional setting to carry category spending limits into a new month. On refresh, the app copies the previous month's category limit amounts only for categories that do not already have a current-month limit.
+- Existing current-month category limits are never overwritten. The rollover does not transfer cash, transaction totals, unspent amounts or savings balances.
+- The rollover preference is saved in SQLite and is included in JSON backup/restore.
+- Build verification for CSV export and rollover is pending; document-picker behavior requires device testing.
