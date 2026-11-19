@@ -93,6 +93,25 @@ function getTaskDueLabel(value) {
   return 'Due ' + formatDate(key);
 }
 
+function formatActivityDateTime(start, end) {
+  if (!start) return 'Date not set';
+  const dateLabel = formatDate(String(start).slice(0, 10));
+  const startTime = String(start).slice(11, 16);
+  const endTime = end ? String(end).slice(11, 16) : '';
+  return dateLabel + (startTime ? ' · ' + formatClock(startTime) : '') + (endTime ? ' – ' + formatClock(endTime) : '');
+}
+
+function isValidCalendarDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
+}
+
+function timeToMinutes(value) {
+  return Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
+}
+
 export default function App() {
   const [active, setActive] = useState('Home');
   const [paletteName, setPaletteName] = useState('Forest');
@@ -134,6 +153,13 @@ export default function App() {
   const [fileImportSubjectId, setFileImportSubjectId] = useState('');
   const [fileCategoryDraft, setFileCategoryDraft] = useState('Lecture');
   const [activities, setActivities] = useState([]);
+  const [showActivityForm, setShowActivityForm] = useState(false);
+  const [editingActivityId, setEditingActivityId] = useState(null);
+  const [activityTitleDraft, setActivityTitleDraft] = useState('');
+  const [activityDateDraft, setActivityDateDraft] = useState(getLocalDateKey());
+  const [activityStartTimeDraft, setActivityStartTimeDraft] = useState('09:00');
+  const [activityEndTimeDraft, setActivityEndTimeDraft] = useState('10:00');
+  const [activityDetailsDraft, setActivityDetailsDraft] = useState('');
   const [transactions, setTransactions] = useState([]);
   const [monthlyLimit, setMonthlyLimit] = useState(0);
   const [categoryBudgets, setCategoryBudgets] = useState([]);
@@ -164,7 +190,7 @@ export default function App() {
       query('SELECT notes.*, subjects.name AS subject_name, subjects.code AS subject_code FROM notes LEFT JOIN subjects ON subjects.id = notes.subject_id ORDER BY notes.pinned DESC, notes.updated_at DESC, notes.id DESC'),
       query('SELECT lecture_files.*, subjects.name AS subject_name, subjects.code AS subject_code FROM lecture_files LEFT JOIN subjects ON subjects.id = lecture_files.subject_id ORDER BY lecture_files.imported_at DESC, lecture_files.id DESC'),
       query('SELECT classes.*, subjects.name AS subject_name, subjects.code AS subject_code, subjects.color AS subject_color, subjects.room AS subject_room FROM classes LEFT JOIN subjects ON subjects.id = classes.subject_id ORDER BY classes.day_of_week, classes.start_time'),
-      query('SELECT * FROM activities WHERE starts_at IS NOT NULL ORDER BY starts_at ASC LIMIT 5'),
+      query('SELECT * FROM activities WHERE starts_at IS NOT NULL ORDER BY starts_at ASC, id ASC'),
       query("SELECT * FROM budget_transactions WHERE strftime('%Y-%m', occurred_at, 'localtime') = strftime('%Y-%m', 'now', 'localtime') ORDER BY occurred_at DESC, id DESC"),
       query("SELECT limit_amount FROM monthly_budgets WHERE month = strftime('%Y-%m', 'now', 'localtime') LIMIT 1"),
       query("SELECT * FROM category_budgets WHERE month = strftime('%Y-%m', 'now', 'localtime') ORDER BY category"),
@@ -477,6 +503,90 @@ export default function App() {
     ]);
   };
 
+  const openActivityForm = activity => {
+    setEditingActivityId(activity?.id || null);
+    setActivityTitleDraft(activity?.title || '');
+    setActivityDetailsDraft(activity?.details || '');
+    if (activity?.starts_at) {
+      const start = String(activity.starts_at).replace('T', ' ');
+      setActivityDateDraft(start.slice(0, 10));
+      setActivityStartTimeDraft(start.slice(11, 16) || '09:00');
+    } else {
+      setActivityDateDraft(getLocalDateKey());
+      setActivityStartTimeDraft('09:00');
+    }
+    if (activity?.ends_at) {
+      const end = String(activity.ends_at).replace('T', ' ');
+      setActivityEndTimeDraft(end.slice(11, 16) || '10:00');
+    } else {
+      setActivityEndTimeDraft('10:00');
+    }
+    setShowForm(false);
+    setShowActivityForm(true);
+  };
+
+  const saveActivity = async () => {
+    const title = activityTitleDraft.trim();
+    const date = activityDateDraft.trim();
+    const startTime = activityStartTimeDraft.trim();
+    const endTime = activityEndTimeDraft.trim();
+    if (!title) {
+      Alert.alert('Missing activity name', 'Enter a title for this activity or appointment.');
+      return;
+    }
+    if (!isValidCalendarDate(date)) {
+      Alert.alert('Invalid date', 'Use a real date in YYYY-MM-DD format.');
+      return;
+    }
+    if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(startTime)) {
+      Alert.alert('Invalid start time', 'Use 24-hour HH:MM format, such as 09:30.');
+      return;
+    }
+    if (endTime && !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(endTime)) {
+      Alert.alert('Invalid end time', 'Use 24-hour HH:MM format, such as 10:30, or leave it blank.');
+      return;
+    }
+    if (endTime && timeToMinutes(endTime) <= timeToMinutes(startTime)) {
+      Alert.alert('Invalid activity duration', 'The end time must be later than the start time.');
+      return;
+    }
+    const startsAt = date + ' ' + startTime + ':00';
+    const endsAt = endTime ? date + ' ' + endTime + ':00' : null;
+    try {
+      if (editingActivityId) {
+        await execute(
+          'UPDATE activities SET title = ?, starts_at = ?, ends_at = ?, details = ? WHERE id = ?',
+          [title, startsAt, endsAt, activityDetailsDraft.trim(), editingActivityId],
+        );
+      } else {
+        await execute(
+          'INSERT INTO activities (title, starts_at, ends_at, details) VALUES (?, ?, ?, ?)',
+          [title, startsAt, endsAt, activityDetailsDraft.trim()],
+        );
+      }
+      setShowActivityForm(false);
+      setEditingActivityId(null);
+      setActivityTitleDraft('');
+      setActivityDetailsDraft('');
+      await refresh();
+    } catch (error) {
+      Alert.alert('Could not save activity', String(error?.message || error));
+    }
+  };
+
+  const removeActivity = activity => {
+    Alert.alert('Delete activity?', 'This will remove ' + activity.title + ' from your personal plans.', [
+      {text: 'Cancel', style: 'cancel'},
+      {text: 'Delete', style: 'destructive', onPress: async () => {
+        try {
+          await execute('DELETE FROM activities WHERE id = ?', [activity.id]);
+          await refresh();
+        } catch (error) {
+          Alert.alert('Could not delete activity', String(error?.message || error));
+        }
+      }},
+    ]);
+  };
   const saveCategoryLimit = async () => {
     const value = Number(categoryLimitDraft);
     if (!Number.isFinite(value) || value <= 0) {
@@ -754,16 +864,20 @@ export default function App() {
       <View style={styles.sectionBlock}>
         <SectionTitle title="Personal activities" />
         <Card>
-          {activities.slice(0, 3).map(activity => (
+          {activities.filter(activity => new Date(String(activity.starts_at).replace(' ', 'T')).getTime() >= Date.now()).slice(0, 3).map(activity => (
             <View key={activity.id} style={styles.activityRow}>
-              <View style={styles.activityMark} />
-              <View style={styles.activityInfo}>
+              <Pressable onPress={() => openActivityForm(activity)} style={styles.activityInfo} accessibilityRole="button" accessibilityLabel={'Edit activity ' + activity.title}>
                 <Text style={styles.taskTitle}>{activity.title}</Text>
-                <Text style={styles.taskDue}>{formatDate(activity.starts_at)}</Text>
-              </View>
+                <Text style={styles.taskDue}>{formatActivityDateTime(activity.starts_at, activity.ends_at)}</Text>
+                {!!activity.details ? <Text style={styles.rowHint} numberOfLines={1}>{activity.details}</Text> : null}
+              </Pressable>
+              <Pressable onPress={() => removeActivity(activity)} style={styles.taskRemove} accessibilityRole="button" accessibilityLabel={'Delete ' + activity.title}>
+                <Text style={styles.taskRemoveText}>×</Text>
+              </Pressable>
             </View>
           ))}
-          {!activities.length ? <Empty label="Personal appointments and activities will appear here." /> : null}
+          {!activities.some(activity => new Date(String(activity.starts_at).replace(' ', 'T')).getTime() >= Date.now()) ? <Empty label="No upcoming activities. Add appointments, errands or personal plans here." /> : null}
+          <Action label="＋ Add activity" secondary onPress={() => openActivityForm(null)} />
         </Card>
       </View>
     </>
@@ -1403,6 +1517,32 @@ export default function App() {
         {!!pageTitle ? <Text style={styles.pageTitle}>{pageTitle}</Text> : null}
         {renderContent()}
       </ScrollView>
+      {showActivityForm ? (
+        <View style={styles.formOverlay}>
+          <View style={styles.formCard}>
+            <Text style={styles.heading}>{editingActivityId ? 'Edit activity' : 'New activity'}</Text>
+            <Text style={styles.formSubtitle}>Add an appointment, errand or personal plan.</Text>
+            <ScrollView style={styles.scheduleFormScroll} keyboardShouldPersistTaps="handled">
+              <TextInput value={activityTitleDraft} onChangeText={setActivityTitleDraft} placeholder="Activity name *" placeholderTextColor={colors.muted} style={styles.input} />
+              <Text style={styles.fieldLabel}>DATE (YYYY-MM-DD)</Text>
+              <TextInput value={activityDateDraft} onChangeText={setActivityDateDraft} placeholder="2026-11-25" placeholderTextColor={colors.muted} style={styles.input} autoCapitalize="none" maxLength={10} />
+              <Text style={styles.fieldLabel}>TIME (24-HOUR)</Text>
+              <View style={styles.timeInputRow}>
+                <TextInput value={activityStartTimeDraft} onChangeText={setActivityStartTimeDraft} placeholder="09:00" placeholderTextColor={colors.muted} style={[styles.input, styles.timeInput]} keyboardType="numbers-and-punctuation" maxLength={5} />
+                <Text style={styles.timeSeparator}>to</Text>
+                <TextInput value={activityEndTimeDraft} onChangeText={setActivityEndTimeDraft} placeholder="10:00" placeholderTextColor={colors.muted} style={[styles.input, styles.timeInput]} keyboardType="numbers-and-punctuation" maxLength={5} />
+              </View>
+              <Text style={styles.formSubtitle}>The end time is optional. Leave it blank for an activity without a fixed end time.</Text>
+              <Text style={styles.fieldLabel}>NOTES (OPTIONAL)</Text>
+              <TextInput value={activityDetailsDraft} onChangeText={setActivityDetailsDraft} placeholder="Add details or location..." placeholderTextColor={colors.muted} style={[styles.input, styles.noteEditor]} multiline textAlignVertical="top" />
+            </ScrollView>
+            <View style={styles.formActions}>
+              <Action label="Cancel" secondary onPress={() => setShowActivityForm(false)} />
+              <Action label={editingActivityId ? 'Save changes' : 'Save activity'} onPress={saveActivity} />
+            </View>
+          </View>
+        </View>
+      ) : null}
       {showForm && active === 'Schedule' ? (
         <View style={styles.formOverlay}>
           <View style={styles.formCard}>
@@ -1539,7 +1679,7 @@ export default function App() {
       <View style={styles.tabBar}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabContent}>
           {tabs.map(tab => (
-            <Pressable key={tab.id} onPress={() => {setActive(tab.id); setShowForm(false);}} style={[styles.tab, active === tab.id && styles.activeTab]}>
+            <Pressable key={tab.id} onPress={() => {setActive(tab.id); setShowForm(false); setShowActivityForm(false);}} style={[styles.tab, active === tab.id && styles.activeTab]}>
               <Text style={[styles.tabIcon, active === tab.id && styles.activeTabText]}>{tab.icon}</Text>
               <Text style={[styles.tabLabel, active === tab.id && styles.activeTabText]}>{tab.id === 'Notepad' ? 'Notes' : tab.id}</Text>
             </Pressable>

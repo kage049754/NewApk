@@ -50,11 +50,20 @@ Initial React Native foundation committed to `main`.
 - Artifact `NewApk-debug` was uploaded (33,193,951 bytes; artifact ID `14502352444`). This is CI build verification, not emulator or physical-device verification.
 - The due-date validator correction is included in this successful commit.
 
+## Personal activities update
+- Added local create, edit and delete for appointments and personal plans with date, start/end time and optional notes.
+- Home shows upcoming activities and offers direct add, edit and delete controls; changes reload from SQLite so the dashboard stays synchronized.
+- Reuses the existing activities table; no backend or schema migration is required.
+
+## Appearance build verification
+- GitHub Actions run #27 for commit `4750af15b552a11c5dbb7b152927422276af2fcd` completed successfully. Android debug APK compilation and artifact upload passed.
+- Artifact `NewApk-debug` was uploaded (33,208,984 bytes; artifact ID `14506211561`). This verifies compilation and upload, not on-device behavior.
+
 ## Known incomplete areas
-Task editing/checklists, personal activity CRUD, note editing/subject linking, transaction editing/deletion and report export, reminders/alarms, widgets, full backup/restore, data migration and comprehensive tests.
+Task editing/checklists, task editing/checklists, note editing/subject linking, transaction editing/deletion and report export, reminders/alarms, widgets, full backup/restore, data migration and comprehensive tests.
 
 ## Next action
-Implement the Lecture Files #14 document library with local file import, subject organization and offline opening, then inspect the next Android Actions result and verify its APK artifact.
+Implement local reminder scheduling for classes, tasks and personal activities (notification permission, sound/vibration, snooze/dismiss), then inspect the next Android Actions result and verify its APK artifact.
 
 ## Tasks build verification
 - GitHub Actions run #21 for commit `c0ac58192526f9f8f86db289cf364bbc802a6258` completed successfully; all job steps, including Android debug APK compilation and artifact upload, passed.
