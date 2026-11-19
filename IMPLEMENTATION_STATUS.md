@@ -152,3 +152,12 @@ Implement local reminder scheduling for classes, tasks and personal activities (
 - Added confirmation-based deletion. After either operation, Budget totals, category summaries and widgets refresh from SQLite.
 - Existing custom transaction categories remain available in the edit form; the income/expense type is retained.
 - Transaction update/delete build verification is pending.
+
+
+## Offline JSON backup and restore
+- Added Android document-provider actions to save a JSON backup to a user-selected location and pick an existing JSON backup for restore.
+- Backup format `newapk-backup` version 1 includes subjects, classes, tasks and checklists, linked notes, activities, Budget transactions, monthly/category limits, savings goals and settings (appearance and reminder preferences).
+- Restore validates the format, required tables, row shapes and record limits before opening a single SQLite transaction. It replaces the selected planner tables atomically and preserves primary IDs and relationships.
+- Existing Lecture Files are not packaged because their private binary copies are device-local. Restore keeps those copies and clears their old subject associations to avoid linking them to unrelated restored subjects.
+- Settings restore the saved appearance preset/custom colors; a full data refresh rebuilds reminders and installed widget contents.
+- Backup/restore build verification is pending. Actual document-picker save and restore behavior requires emulator/physical-device testing.

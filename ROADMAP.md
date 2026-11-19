@@ -33,8 +33,9 @@
 - [ ] Test widget installation, launcher rendering, resize behavior, live refresh and Quick Expense handoff.
 - [x] Implement persistent Forest, Sunset, Monochrome and Night appearance presets.
 - [x] Add editable custom color combinations for backgrounds, cards, primary/accent, text and borders.
-- [ ] Complete the remaining settings modules, including notifications, alarms, privacy, storage and backup/restore.
-- [ ] Implement module-aware JSON backup/export and validated restore/import.
+- [x] Add offline JSON backup and validated restore to Settings.
+- [ ] Complete the remaining settings modules, including profile, storage information and backup of actual Lecture File contents.
+- [x] Implement module-aware JSON backup/export and validated restore/import (Lecture File contents remain device-local).
 - [ ] Add migration support for existing CampusOS JSON backups where compatible.
 - [ ] Add automated unit and UI tests.
 - [ ] Verify emulator launch, persistence, navigation and notification behavior.

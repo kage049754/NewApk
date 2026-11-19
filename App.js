@@ -4,7 +4,7 @@ import {
   SafeAreaView, ScrollView, StatusBar, StyleSheet, Switch, Text, TextInput,
   Pressable, View,
 } from 'react-native';
-import {execute, getDashboardSummary, openDatabase, query} from './src/data/database';
+import {createPlannerBackup, execute, getDashboardSummary, openDatabase, query, restorePlannerBackup} from './src/data/database';
 import {defaultCustomPalette, palettes} from './src/theme/palettes';
 
 const tabs = [
@@ -337,6 +337,7 @@ export default function App() {
   const [category, setCategory] = useState('Other');
   const [budgetLimitDraft, setBudgetLimitDraft] = useState('');
   const [loading, setLoading] = useState(true);
+  const [backupBusy, setBackupBusy] = useState(false);
   const [draft, setDraft] = useState('');
   const [detail, setDetail] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -546,6 +547,103 @@ export default function App() {
       await NativeModules.Reminders?.openExactAlarmSettings?.();
     } catch (error) {
       Alert.alert('Could not open alarm access settings', String(error?.message || error));
+    }
+  };
+
+  const exportPlannerData = async () => {
+    if (backupBusy) return;
+    if (!NativeModules.LocalBackup?.saveBackup) {
+      Alert.alert('Backup unavailable', 'The Android backup document picker is not available in this build.');
+      return;
+    }
+    setBackupBusy(true);
+    try {
+      const payload = await createPlannerBackup();
+      const savedUri = await NativeModules.LocalBackup.saveBackup(JSON.stringify(payload));
+      if (savedUri) {
+        Alert.alert('Backup saved', 'Your NewApk planner data was saved as a JSON backup. Keep this file somewhere safe.');
+      }
+    } catch (error) {
+      Alert.alert('Could not export backup', String(error?.message || error));
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
+  const importPlannerData = async () => {
+    if (backupBusy) return;
+    if (!NativeModules.LocalBackup?.pickBackup) {
+      Alert.alert('Restore unavailable', 'The Android backup document picker is not available in this build.');
+      return;
+    }
+    setBackupBusy(true);
+    try {
+      const raw = await NativeModules.LocalBackup.pickBackup();
+      if (!raw) return;
+      let backup;
+      try {
+        backup = JSON.parse(raw);
+      } catch (_) {
+        Alert.alert('Invalid backup file', 'This file is not valid JSON.');
+        return;
+      }
+      if (!backup || backup.format !== 'newapk-backup' || backup.version !== 1 || !backup.data) {
+        Alert.alert('Unsupported backup', 'Choose a NewApk JSON backup created by this app.');
+        return;
+      }
+      const requiredTables = ['subjects', 'classes', 'notes', 'tasks', 'activities', 'budget_transactions', 'monthly_budgets', 'category_budgets', 'savings_goals', 'settings'];
+      const invalidTable = requiredTables.find(table => !Array.isArray(backup.data[table]));
+      if (invalidTable) {
+        Alert.alert('Incomplete backup', 'The backup is missing the ' + invalidTable + ' data section.');
+        return;
+      }
+      const totalRecords = requiredTables.reduce((sum, table) => sum + backup.data[table].length, 0);
+      const lectureCount = Array.isArray(backup.lectureFilesManifest) ? backup.lectureFilesManifest.length : 0;
+      Alert.alert(
+        'Replace current planner data?',
+        'Restore ' + totalRecords + ' records from this backup? Existing planner records will be replaced. Imported Lecture Files stay on this device and are not included in the JSON file; their subject links will be cleared.',
+        [
+          {text: 'Cancel', style: 'cancel'},
+          {text: 'Restore backup', style: 'destructive', onPress: async () => {
+            setBackupBusy(true);
+            try {
+              const restoredCount = await restorePlannerBackup(backup.data);
+              const appearanceRows = await query(
+                'SELECT key, value FROM settings WHERE key IN (?, ?)',
+                ['appearance_palette', 'appearance_custom_palette'],
+              );
+              const appearance = {};
+              appearanceRows.forEach(item => { appearance[item.key] = item.value; });
+              let restoredCustom = {...defaultCustomPalette};
+              if (appearance.appearance_custom_palette) {
+                try {
+                  const parsed = JSON.parse(appearance.appearance_custom_palette);
+                  CUSTOM_COLOR_FIELDS.forEach(field => {
+                    if (isValidHexColor(parsed[field.key])) restoredCustom[field.key] = parsed[field.key];
+                  });
+                } catch (_) {}
+              }
+              setCustomPalette(restoredCustom);
+              setCustomPaletteDraft(restoredCustom);
+              if ([...Object.keys(palettes), 'Custom'].includes(appearance.appearance_palette)) {
+                setPaletteName(appearance.appearance_palette);
+              } else {
+                setPaletteName('Forest');
+              }
+              await refresh();
+              Alert.alert('Restore complete', restoredCount + ' planner records were restored. ' + lectureCount + ' Lecture Files remain stored locally on this device.');
+            } catch (error) {
+              Alert.alert('Restore failed', 'Your current data was not fully replaced. ' + String(error?.message || error));
+            } finally {
+              setBackupBusy(false);
+            }
+          }},
+        ],
+      );
+    } catch (error) {
+      Alert.alert('Could not read backup', String(error?.message || error));
+    } finally {
+      setBackupBusy(false);
     }
   };
 
@@ -1986,6 +2084,15 @@ export default function App() {
             </View>
             {!reminderStatus.exactAlarmAllowed ? <Action label="Open settings" secondary onPress={openExactAlarmSettings} /> : <Text style={styles.reminderAccessState}>Allowed</Text>}
           </View>
+        </Card>
+        <Card>
+          <Heading>Backup and restore</Heading>
+          <Text style={styles.bodyText}>Save subjects, timetable, tasks and checklists, notes, activities, Budget records, savings goals, appearance and reminder settings to a JSON file. Restoring replaces current planner records after confirmation.</Text>
+          <View style={styles.formActions}>
+            <Action label={backupBusy ? 'Working…' : 'Export JSON backup'} onPress={exportPlannerData} />
+            <Action label="Restore backup" secondary onPress={importPlannerData} />
+          </View>
+          <Text style={styles.formSubtitle}>Imported Lecture Files stay on this device and their file contents are not included in the backup.</Text>
         </Card>
         <Card><Heading>Data and privacy</Heading><Text style={styles.bodyText}>Your planner data is stored locally on this device. NewApk does not require an account or cloud database.</Text></Card>
         <Card><Heading>About NewApk</Heading><Text style={styles.bodyText}>React Native student productivity app · Offline-first</Text></Card>

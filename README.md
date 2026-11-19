@@ -17,7 +17,7 @@ NewApk is an independent project. The original CampusOS repository is a referenc
 - Local reminders, alarms and vibration
 - Android home-screen widgets
 - Appearance presets and custom color combinations (saved locally)
-- Settings, local backup and restore
+- Settings, local JSON backup and restore
 
 ### Explicitly excluded
 Attendance, calculator, study timer/Pomodoro, date calculator, unit converter, grade calculator, IT/CS utilities, exam reminders, all campus accounts and online/social administration features (registration/login, approvals, announcements, groups, group chat, group leadership, member search, invitations and QR group joining).
