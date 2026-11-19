@@ -98,36 +98,34 @@ import xml.etree.ElementTree as ET
 
 path, needle, preference = sys.argv[1], sys.argv[2], sys.argv[3]
 root = ET.parse(path).getroot()
-parents = {child: parent for parent in root.iter() for child in parent}
 candidates = []
 for node in root.iter():
     if node.attrib.get("text") != needle and node.attrib.get("content-desc") != needle:
         continue
-    current = node
-    while current in parents:
-        if current.attrib.get("clickable") == "true":
-            match = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", current.attrib.get("bounds", ""))
-            if match:
-                x1, y1, x2, y2 = map(int, match.groups())
-                candidates.append((x1, y1, x2, y2))
-            break
-        current = parents[current]
+    match = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", node.attrib.get("bounds", ""))
+    if not match:
+        continue
+    x1, y1, x2, y2 = map(int, match.groups())
+    if x2 <= x1 or y2 <= y1:
+        continue
+    candidates.append((x1, y1, x2, y2))
 if not candidates:
-    raise SystemExit(f"No clickable UI element found for text: {needle}")
+    raise SystemExit(f"No visible UI text bounds found for: {needle}")
 if preference == "bottom":
     x1, y1, x2, y2 = max(candidates, key=lambda item: item[3])
 elif preference == "top":
     x1, y1, x2, y2 = min(candidates, key=lambda item: item[1])
 else:
     x1, y1, x2, y2 = candidates[0]
-print((x1 + x2) // 2, (y1 + y2) // 2)
+# Tap the exact text node, not the center of a larger Pressable ancestor.
+print((x1 + x2) // 2, (y1 + y2) // 2, x1, y1, x2, y2)
 PY
 )"
-  local x y
-  read -r x y <<< "$coordinates"
+  local x y x1 y1 x2 y2
+  read -r x y x1 y1 x2 y2 <<< "$coordinates"
+  printf 'TAP text=%q point=(%s,%s) bounds=[%s,%s][%s,%s]\n' "$needle" "$x" "$y" "$x1" "$y1" "$x2" "$y2" | tee -a "$REPORT_DIR/tap-events.txt"
   adb shell input tap "$x" "$y"
 }
-
 ui_click_input_hint() {
   local hint="$1"
   local coordinates
@@ -154,7 +152,17 @@ PY
 )"
   local x y
   read -r x y <<< "$coordinates"
+  printf 'INPUT hint=%q point=(%s,%s)\n' "$hint" "$x" "$y" | tee -a "$REPORT_DIR/tap-events.txt"
   adb shell input tap "$x" "$y"
+}
+
+capture_stage() {
+  local stage="$1"
+  dump_ui
+  cp "$REPORT_DIR/window.xml" "$REPORT_DIR/$stage.xml"
+  adb shell screencap -p "/sdcard/newapk-$stage.png"
+  adb pull "/sdcard/newapk-$stage.png" "$REPORT_DIR/$stage.png" >/dev/null
+  echo "CAPTURED stage=$stage" | tee -a "$REPORT_DIR/tap-events.txt"
 }
 
 verify_tab() {
@@ -177,16 +185,19 @@ if [[ -z "$PID" ]]; then
 fi
 printf 'NewApk process started: %s\n' "$PID" | tee "$REPORT_DIR/process.txt"
 ui_wait_text "Make today count."
+capture_stage home-before-task
 
 # Exercise the task form and write through the native SQLite bridge.
 ui_click_text "Add task" top
 ui_wait_text "New task"
-dump_ui
+capture_stage task-form
 ui_click_input_hint "Title"
 adb shell input text "$TASK_TITLE"
 adb shell input keyevent 4
 dump_ui
+capture_stage task-form-ready-to-save
 ui_click_text "Save"
+capture_stage after-task-save
 ui_wait_text "YOUR WEEKLY OVERVIEW"
 sleep 2
 
