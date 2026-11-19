@@ -1490,6 +1490,14 @@ export default function App() {
   const budgetRemaining = monthlyLimit - expenses;
   const budgetProgress = monthlyLimit > 0 ? Math.min(100, Math.max(0, expenses / monthlyLimit * 100)) : 0;
   const pendingTasks = tasks.filter(task => !task.completed);
+  const weekEnd = new Date();
+  weekEnd.setHours(23, 59, 59, 999);
+  weekEnd.setDate(weekEnd.getDate() + (7 - weekEnd.getDay()));
+  const dueThisWeek = pendingTasks.filter(task => task.due_at && String(task.due_at).slice(0, 10) <= getLocalDateKey(weekEnd));
+  const overdueTasks = pendingTasks.filter(task => task.due_at && String(task.due_at).slice(0, 10) < getLocalDateKey());
+  const savingsTargetTotal = savingsGoals.reduce((sum, goal) => sum + Math.max(0, Number(goal.target_amount) || 0), 0);
+  const savingsCurrentTotal = savingsGoals.reduce((sum, goal) => sum + Math.max(0, Number(goal.saved_amount) || 0), 0);
+  const savingsProgress = savingsTargetTotal > 0 ? Math.min(100, savingsCurrentTotal / savingsTargetTotal * 100) : 0;
   const now = new Date();
   const dateLabel = DAYS[now.getDay()] + ', ' + MONTHS[now.getMonth()] + ' ' + now.getDate();
 
@@ -1617,6 +1625,62 @@ export default function App() {
           </View>
           <View style={styles.progressTrack}><View style={[styles.progressFill, {width: budgetProgress + '%'}]} /></View>
           <Text style={styles.budgetFootnote}>{monthlyLimit > 0 ? '₱' + Math.max(0, budgetRemaining).toFixed(2) + ' remaining from your monthly limit' : 'Set a monthly limit to track your spending progress.'}</Text>
+        </Card>
+      </View>
+
+      <View style={styles.sectionBlock}>
+        <SectionTitle title="Weekly task progress" action="View tasks" onPress={() => setActive('Tasks')} />
+        <Card>
+          <View style={styles.budgetSummaryRow}>
+            <View>
+              <Text style={styles.budgetCaption}>DUE THIS WEEK</Text>
+              <Text style={styles.budgetAmount}>{dueThisWeek.length}</Text>
+            </View>
+            <View style={styles.budgetBalance}>
+              <Text style={styles.budgetCaption}>OVERDUE</Text>
+              <Text style={[styles.budgetBalanceValue, overdueTasks.length ? {color: colors.accent} : null]}>{overdueTasks.length}</Text>
+            </View>
+          </View>
+          <Text style={styles.budgetFootnote}>{pendingTasks.length ? (pendingTasks.length - dueThisWeek.length) + ' other pending tasks outside this week or without a deadline' : 'All tasks are complete. Add a task when something needs your attention.'}</Text>
+          <Action label="＋ Add task" secondary onPress={() => {setActive('Tasks'); openTaskForm(null);}} />
+        </Card>
+      </View>
+
+      <View style={styles.sectionBlock}>
+        <SectionTitle title="Savings progress" action="View budget" onPress={() => setActive('Budget')} />
+        <Card>
+          {savingsGoals.length ? (
+            <>
+              <View style={styles.budgetSummaryRow}>
+                <View>
+                  <Text style={styles.budgetCaption}>SAVED SO FAR</Text>
+                  <Text style={styles.budgetAmount}>₱{savingsCurrentTotal.toFixed(2)}</Text>
+                </View>
+                <View style={styles.budgetBalance}>
+                  <Text style={styles.budgetCaption}>TOTAL TARGET</Text>
+                  <Text style={styles.budgetBalanceValue}>₱{savingsTargetTotal.toFixed(2)}</Text>
+                </View>
+              </View>
+              <View style={styles.progressTrack}><View style={[styles.progressFill, {width: savingsProgress + '%'}]} /></View>
+              <Text style={styles.budgetFootnote}>{Math.round(savingsProgress)}% across {savingsGoals.length} savings goal{savingsGoals.length === 1 ? '' : 's'}</Text>
+              {savingsGoals.slice(0, 2).map(goal => {
+                const target = Math.max(0, Number(goal.target_amount) || 0);
+                const saved = Math.max(0, Number(goal.saved_amount) || 0);
+                const progress = target > 0 ? Math.min(100, saved / target * 100) : 0;
+                return <View key={goal.id} style={styles.activityRow}>
+                  <View style={styles.activityInfo}>
+                    <Text style={styles.taskTitle} numberOfLines={1}>{goal.title}</Text>
+                    <Text style={styles.taskDue}>₱{saved.toFixed(2)} of ₱{target.toFixed(2)} · {Math.round(progress)}%</Text>
+                  </View>
+                </View>;
+              })}
+            </>
+          ) : (
+            <>
+              <Empty label="Create a savings goal to track your progress here." />
+              <Action label="Open budget" secondary onPress={() => setActive('Budget')} />
+            </>
+          )}
         </Card>
       </View>
 
