@@ -46,11 +46,25 @@
 - [x] Add Jest unit tests for CampusOS backup conversion, malformed/partial input, timetable row validation and lecture attachment size limits.
 - [x] Add Jest tests for Home task week boundaries, overdue separation, date validation and combined savings progress.
 - [ ] Expand automated unit and UI test coverage beyond the CampusOS migration and Home dashboard calculation suites.
-- [ ] Verify emulator launch, persistence, navigation and notification behavior.
+- [x] Verify standalone QA APK installation, offline startup and Home-screen rendering in an Android API 35 x86_64 emulator.
+- [ ] Verify data persistence across app relaunch, cross-module navigation, notification delivery and alarm behavior in emulator/device testing.
 - [ ] Prepare release APK and document physical-device testing separately.
 
 
 ## APK packaging
 - [x] Add a standalone QA APK with an embedded React Native bundle and CI signature verification.
 - [x] Download and inspect the run #47 standalone QA APK: archive integrity, DEX presence and embedded React Native bundle confirmed; CI signature check passed.
-- [ ] Prepare the production-signed release APK.
+- [ ] Prepare the production-signed release APK (the CI QA APK uses the generated debug key).
+
+
+## Android runtime smoke verification
+- [x] Fix React Native 0.76 merged native-library loading by initializing SoLoader with `OpenSourceMergedSoMapping`.
+- [x] Fix SQLite startup schema initialization: execute awaited statements outside async transaction callbacks and cache/retry the database-open promise.
+- [x] Fix backup restore transaction scheduling: queue `tx.executeSql` calls synchronously inside the transaction so the restore remains atomic.
+- [x] Improve startup SQLite error diagnostics and make emulator smoke failures print the captured UI hierarchy.
+- GitHub Actions run #63 for commit `dd202981b5c88b25fadc25bd7399572cc01db275` completed successfully: all 13 Jest tests, debug APK build, standalone QA APK build, embedded React Native bundle verification, CI APK signature verification, artifact uploads and emulator smoke test passed.
+- The API 35 x86_64 emulator installed the standalone APK with Wi-Fi and mobile data disabled, launched `MainActivity`, kept the application process alive and found the Home heading `Make today count.` in the UI hierarchy. No fatal Android/React Native errors were logged.
+- Smoke evidence artifact ID: `14559764535`. The screenshot and UI hierarchy were inspected; the Home screen appeared without the previous SQLite error dialog.
+- Standalone QA artifact ID: `14562040058`; extracted APK size: 48,061,149 bytes; embedded `assets/index.android.bundle`: 994,816 bytes; `classes.dex` and Hermes/React Native native libraries are present.
+- Standalone QA APK SHA-256: `a2fcb4ade6e3eeefa7223caa8b39919584bacbff391a394f6219da8d31b423cf`. APK ZIP integrity passed and CI signature verification passed.
+- This is an emulator startup/UI smoke test, not a complete feature test. Persistent data across relaunch, module navigation, notification delivery, widgets and the physical Infinix device remain unverified. The QA APK is signed with the generated Android debug key, not a production key.
