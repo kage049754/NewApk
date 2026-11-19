@@ -37,6 +37,22 @@ function greetingForHour(hour) {
   return 'Good evening';
 }
 
+function getLocalDateKey(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return year + '-' + month + '-' + day;
+}
+
+function getTaskDueLabel(value) {
+  if (!value) return 'No due date';
+  const key = String(value).slice(0, 10);
+  const today = getLocalDateKey();
+  if (key < today) return 'Overdue · ' + formatDate(key);
+  if (key === today) return 'Due today';
+  return 'Due ' + formatDate(key);
+}
+
 export default function App() {
   const [active, setActive] = useState('Home');
   const [paletteName, setPaletteName] = useState('Forest');
@@ -58,6 +74,11 @@ export default function App() {
   const [scheduleClassRoom, setScheduleClassRoom] = useState('');
   const [scheduleClassType, setScheduleClassType] = useState('Lecture');
   const [tasks, setTasks] = useState([]);
+  const [taskDueDate, setTaskDueDate] = useState('');
+  const [taskPriority, setTaskPriority] = useState('Medium');
+  const [taskCategory, setTaskCategory] = useState('Assignment');
+  const [taskFilter, setTaskFilter] = useState('All');
+  const [taskSearch, setTaskSearch] = useState('');
   const [notes, setNotes] = useState([]);
   const [activities, setActivities] = useState([]);
   const [transactions, setTransactions] = useState([]);
@@ -77,7 +98,7 @@ export default function App() {
     const [stats, subjectRows, taskRows, noteRows, classRows, activityRows, transactionRows, limitRows] = await Promise.all([
       getDashboardSummary(),
       query('SELECT * FROM subjects ORDER BY name'),
-      query('SELECT * FROM tasks ORDER BY completed, CASE WHEN due_at IS NULL THEN 1 ELSE 0 END, due_at ASC, id DESC'),
+      query("SELECT * FROM tasks ORDER BY completed, CASE WHEN due_at IS NULL THEN 1 ELSE 0 END, due_at ASC, CASE priority WHEN 'High' THEN 0 WHEN 'Medium' THEN 1 ELSE 2 END, id DESC"),
       query('SELECT * FROM notes ORDER BY pinned DESC, id DESC'),
       query('SELECT classes.*, subjects.name AS subject_name, subjects.code AS subject_code, subjects.color AS subject_color, subjects.room AS subject_room FROM classes LEFT JOIN subjects ON subjects.id = classes.subject_id ORDER BY classes.day_of_week, classes.start_time'),
       query('SELECT * FROM activities WHERE starts_at IS NOT NULL ORDER BY starts_at ASC LIMIT 5'),
@@ -166,7 +187,23 @@ export default function App() {
         return;
       }
       if (active === 'Tasks') {
-        await execute('INSERT INTO tasks (title, details) VALUES (?, ?)', [value, detail.trim()]);
+        const dueDate = taskDueDate.trim();
+        if (dueDate) {
+          if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(dueDate)) {
+            Alert.alert('Invalid due date', 'Use YYYY-MM-DD, for example 2026-11-25.');
+            return;
+          }
+          const [year, month, day] = dueDate.split('-').map(Number);
+          const parsedDate = new Date(year, month - 1, day);
+          if (parsedDate.getFullYear() !== year || parsedDate.getMonth() !== month - 1 || parsedDate.getDate() !== day) {
+            Alert.alert('Invalid due date', 'Enter a real calendar date.');
+            return;
+          }
+        }
+        await execute(
+          'INSERT INTO tasks (title, details, due_at, priority, category) VALUES (?, ?, ?, ?, ?)',
+          [value, detail.trim(), dueDate || null, taskPriority, taskCategory],
+        );
       } else if (active === 'Notepad') {
         await execute('INSERT INTO notes (title, body) VALUES (?, ?)', [value, detail.trim()]);
       } else if (active === 'Budget') {
@@ -187,6 +224,11 @@ export default function App() {
       setDetail('');
       setAmount('');
       setCategory('Other');
+      setTaskDueDate('');
+      setTaskPriority('Medium');
+      setTaskCategory('Assignment');
+      setTaskSearch('');
+      setTaskFilter('All');
       setShowForm(false);
       await refresh();
     } catch (error) {
@@ -219,6 +261,20 @@ export default function App() {
     } catch (error) {
       Alert.alert('Could not update task', String(error));
     }
+  };
+
+  const removeTask = task => {
+    Alert.alert('Delete task?', 'This task will be permanently removed from this device.', [
+      {text: 'Cancel', style: 'cancel'},
+      {text: 'Delete', style: 'destructive', onPress: async () => {
+        try {
+          await execute('DELETE FROM tasks WHERE id = ?', [task.id]);
+          await refresh();
+        } catch (error) {
+          Alert.alert('Could not delete task', String(error));
+        }
+      }},
+    ]);
   };
 
   const openScheduleForm = type => {
@@ -492,6 +548,117 @@ export default function App() {
     );
   };
 
+  const renderTasks = () => {
+    const today = getLocalDateKey();
+    const openTasks = tasks.filter(item => !Number(item.completed));
+    const completedTasks = tasks.filter(item => Number(item.completed));
+    const highPriorityTasks = openTasks.filter(item => (item.priority || 'Medium') === 'High');
+    const weekEnd = new Date();
+    weekEnd.setDate(weekEnd.getDate() + (6 - weekEnd.getDay()));
+    const weekEndKey = getLocalDateKey(weekEnd);
+    const dueThisWeek = openTasks.filter(item => {
+      const due = String(item.due_at || '').slice(0, 10);
+      return due && due >= today && due <= weekEndKey;
+    }).length;
+    const progress = tasks.length ? Math.round(completedTasks.length / tasks.length * 100) : 0;
+    const visibleTasks = tasks.filter(item => {
+      const due = String(item.due_at || '').slice(0, 10);
+      const matchesFilter = taskFilter === 'All'
+        || (taskFilter === 'Today' && due === today)
+        || (taskFilter === 'Upcoming' && !Number(item.completed) && due > today)
+        || (taskFilter === 'Completed' && Number(item.completed));
+      const searchValue = taskSearch.trim().toLowerCase();
+      const matchesSearch = !searchValue || [item.title, item.details, item.category, item.priority]
+        .some(value => String(value || '').toLowerCase().includes(searchValue));
+      return matchesFilter && matchesSearch;
+    });
+    return (
+      <>
+        <View style={styles.taskDashboardHero}>
+          <View style={styles.taskHeroTop}>
+            <Text style={styles.taskHeroEyebrow}>YOUR WEEKLY OVERVIEW</Text>
+            <Text style={styles.taskHeroCount}>{openTasks.length} open</Text>
+          </View>
+          <Text style={styles.taskHeroHeadline}>{completedTasks.length} tasks completed</Text>
+          <Text style={styles.taskHeroCaption}>{dueThisWeek} due this week · {highPriorityTasks.length} high priority</Text>
+          <View style={styles.taskHeroProgressTrack}>
+            <View style={[styles.taskHeroProgressFill, {width: progress + '%'}]} />
+          </View>
+          <Text style={styles.taskHeroFoot}>{progress}% of your task list completed</Text>
+        </View>
+
+        <View style={styles.taskStatsRow}>
+          <View style={styles.taskStatCard}>
+            <Text style={styles.taskStatValue}>{openTasks.length}</Text>
+            <Text style={styles.taskStatLabel}>To do</Text>
+          </View>
+          <View style={styles.taskStatCard}>
+            <Text style={styles.taskStatValue}>{dueThisWeek}</Text>
+            <Text style={styles.taskStatLabel}>Due this week</Text>
+          </View>
+          <View style={styles.taskStatCard}>
+            <Text style={styles.taskStatValue}>{completedTasks.length}</Text>
+            <Text style={styles.taskStatLabel}>Completed</Text>
+          </View>
+        </View>
+
+        <TextInput
+          value={taskSearch}
+          onChangeText={setTaskSearch}
+          placeholder="Search your tasks"
+          placeholderTextColor={colors.muted}
+          style={styles.taskSearch}
+          returnKeyType="search"
+        />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.taskFilterRow}>
+          {['All', 'Today', 'Upcoming', 'Completed'].map(filter => (
+            <Pressable key={filter} onPress={() => setTaskFilter(filter)} style={[styles.taskFilterChip, taskFilter === filter && styles.taskFilterSelected]}>
+              <Text style={[styles.taskFilterText, taskFilter === filter && styles.taskFilterTextSelected]}>{filter}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+
+        <View style={styles.sectionBlock}>
+          <SectionTitle title={taskFilter === 'All' ? 'Your tasks' : taskFilter + ' tasks'} />
+          {visibleTasks.map(item => {
+            const priority = item.priority || 'Medium';
+            const priorityStyle = priority === 'High' ? styles.priorityHigh : priority === 'Low' ? styles.priorityLow : styles.priorityMedium;
+            const priorityTextStyle = priority === 'High' ? styles.priorityTextHigh : priority === 'Low' ? styles.priorityTextLow : styles.priorityTextMedium;
+            return (
+              <View key={item.id} style={[styles.taskCard, Number(item.completed) && styles.taskCardCompleted]}>
+                <View style={styles.taskCardMain}>
+                  <Pressable onPress={() => toggleTask(item)} style={[styles.taskCheckLarge, Number(item.completed) && styles.taskCheckLargeDone]} accessibilityRole="checkbox" accessibilityState={{checked: !!Number(item.completed)}} accessibilityLabel={'Mark ' + item.title + (item.completed ? ' incomplete' : ' complete')}>
+                    <Text style={styles.taskCheckLargeText}>{Number(item.completed) ? '✓' : ''}</Text>
+                  </Pressable>
+                  <View style={styles.taskCardInfo}>
+                    <Text style={[styles.taskCardTitle, Number(item.completed) && styles.strike]} numberOfLines={2}>{item.title}</Text>
+                    {!!item.details ? <Text style={styles.taskCardDescription} numberOfLines={2}>{item.details}</Text> : null}
+                    <View style={styles.taskMetaRow}>
+                      <Text style={styles.taskCategoryText}>{item.category || 'General'}</Text>
+                      <Text style={styles.taskDueText}>{getTaskDueLabel(item.due_at)}</Text>
+                    </View>
+                  </View>
+                  <Pressable onPress={() => removeTask(item)} style={styles.taskRemove} accessibilityRole="button" accessibilityLabel={'Delete ' + item.title}>
+                    <Text style={styles.taskRemoveText}>×</Text>
+                  </Pressable>
+                </View>
+                <View style={[styles.taskPriorityTag, priorityStyle]}>
+                  <Text style={[styles.taskPriorityText, priorityTextStyle]}>{priority.toUpperCase()} PRIORITY</Text>
+                </View>
+              </View>
+            );
+          })}
+          {!visibleTasks.length ? (
+            <Card>
+              <Empty label={taskSearch.trim() ? 'No tasks match your search.' : taskFilter === 'Completed' ? 'Completed tasks will appear here.' : taskFilter === 'Today' ? 'No tasks are due today.' : taskFilter === 'Upcoming' ? 'No upcoming tasks. Add a due date to plan ahead.' : 'No tasks yet. Add your first task to get started.'} />
+            </Card>
+          ) : null}
+        </View>
+        <Action label="＋ Add task" onPress={() => setShowForm(true)} />
+      </>
+    );
+  };
+
   const renderList = (items, type) => (
     <Card>
       {items.map(item => (
@@ -513,7 +680,7 @@ export default function App() {
 
   const renderContent = () => {
     if (active === 'Home') return renderHome();
-    if (active === 'Tasks') return <>{renderList(tasks, 'Tasks')}<Action label="＋ Add task" onPress={() => setShowForm(true)} /></>;
+    if (active === 'Tasks') return renderTasks();
     if (active === 'Notepad') return <>{renderList(notes, 'Notes')}<Action label="＋ New note" onPress={() => setShowForm(true)} /></>;
     if (active === 'Budget') {
       return <>
@@ -645,6 +812,26 @@ export default function App() {
           <View style={styles.formCard}>
             <Text style={styles.heading}>{active === 'Budget' ? (budgetType === 'income' ? 'Add income' : 'Add expense') : active === 'Tasks' ? 'New task' : 'New note'}</Text>
             <TextInput value={draft} onChangeText={setDraft} placeholder={active === 'Budget' ? 'Transaction name' : 'Title'} placeholderTextColor={colors.muted} style={styles.input} />
+            {active === 'Tasks' ? <>
+              <Text style={styles.fieldLabel}>CATEGORY</Text>
+              <View style={styles.choiceRow}>
+                {['Assignment', 'Project', 'Reading', 'Personal', 'Other'].map(option => (
+                  <Pressable key={option} onPress={() => setTaskCategory(option)} style={[styles.choiceChip, taskCategory === option && styles.choiceChipSelected]}>
+                    <Text style={[styles.choiceChipText, taskCategory === option && styles.choiceChipTextSelected]}>{option}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <Text style={styles.fieldLabel}>PRIORITY</Text>
+              <View style={styles.choiceRow}>
+                {['Low', 'Medium', 'High'].map(option => (
+                  <Pressable key={option} onPress={() => setTaskPriority(option)} style={[styles.choiceChip, taskPriority === option && styles.choiceChipSelected]}>
+                    <Text style={[styles.choiceChipText, taskPriority === option && styles.choiceChipTextSelected]}>{option}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <TextInput value={taskDueDate} onChangeText={setTaskDueDate} placeholder="Due date (YYYY-MM-DD)" placeholderTextColor={colors.muted} style={styles.input} autoCapitalize="none" maxLength={10} />
+              <Text style={styles.formSubtitle}>Leave the due date blank when there is no deadline.</Text>
+            </> : null}
             {active === 'Budget' ? <>
               <TextInput value={amount} onChangeText={setAmount} keyboardType="decimal-pad" placeholder="Amount (₱)" placeholderTextColor={colors.muted} style={styles.input} />
               <TextInput value={category} onChangeText={setCategory} placeholder="Category (e.g. Food, Transport, School)" placeholderTextColor={colors.muted} style={styles.input} />
@@ -800,5 +987,46 @@ function makeStyles(c) {
     timeInputRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
     timeInput: {flex: 1}, 
     timeSeparator: {fontSize: 11, color: c.muted},
+    taskDashboardHero: {backgroundColor: c.primary, borderRadius: 24, padding: 19, gap: 9},
+    taskHeroTop: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'},
+    taskHeroEyebrow: {fontSize: 9, color: '#E4EDE1', letterSpacing: 1.3, fontWeight: '800'},
+    taskHeroCount: {fontSize: 10, color: '#FFFFFF', fontWeight: '800', backgroundColor: '#FFFFFF26', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10},
+    taskHeroHeadline: {fontSize: 23, color: '#FFFFFF', fontWeight: '800', letterSpacing: -0.5, marginTop: 8},
+    taskHeroCaption: {fontSize: 11, color: '#E4EDE1'},
+    taskHeroProgressTrack: {height: 8, backgroundColor: '#FFFFFF35', borderRadius: 5, overflow: 'hidden', marginTop: 8},
+    taskHeroProgressFill: {height: 8, backgroundColor: '#FFFFFF', borderRadius: 5},
+    taskHeroFoot: {fontSize: 9, color: '#E4EDE1', fontWeight: '700'},
+    taskStatsRow: {flexDirection: 'row', gap: 8},
+    taskStatCard: {flex: 1, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, borderRadius: 15, padding: 12, gap: 3},
+    taskStatValue: {fontSize: 21, color: c.text, fontWeight: '800'},
+    taskStatLabel: {fontSize: 9, color: c.muted, fontWeight: '700'},
+    taskSearch: {borderWidth: 1, borderColor: c.border, backgroundColor: c.surface, borderRadius: 13, paddingHorizontal: 14, paddingVertical: 11, color: c.text, fontSize: 13},
+    taskFilterRow: {gap: 7, paddingRight: 8},
+    taskFilterChip: {borderWidth: 1, borderColor: c.border, borderRadius: 12, backgroundColor: c.surface, paddingHorizontal: 14, paddingVertical: 9},
+    taskFilterSelected: {backgroundColor: c.primary, borderColor: c.primary},
+    taskFilterText: {fontSize: 10, color: c.muted, fontWeight: '800'},
+    taskFilterTextSelected: {color: '#FFFFFF'},
+    taskCard: {backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, borderRadius: 17, padding: 13, gap: 9},
+    taskCardCompleted: {opacity: 0.72},
+    taskCardMain: {flexDirection: 'row', alignItems: 'flex-start', gap: 10},
+    taskCheckLarge: {width: 23, height: 23, borderRadius: 8, borderWidth: 1.5, borderColor: c.border, alignItems: 'center', justifyContent: 'center', marginTop: 1},
+    taskCheckLargeDone: {backgroundColor: c.primary, borderColor: c.primary},
+    taskCheckLargeText: {fontSize: 13, color: '#FFFFFF', fontWeight: '900'},
+    taskCardInfo: {flex: 1, gap: 5},
+    taskCardTitle: {fontSize: 13, color: c.text, fontWeight: '800', lineHeight: 18},
+    taskCardDescription: {fontSize: 10, color: c.muted, lineHeight: 15},
+    taskMetaRow: {flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 2},
+    taskCategoryText: {fontSize: 9, color: c.primary, fontWeight: '800'},
+    taskDueText: {fontSize: 9, color: c.muted, fontWeight: '600'},
+    taskRemove: {width: 26, height: 26, borderRadius: 9, backgroundColor: c.background, alignItems: 'center', justifyContent: 'center'},
+    taskRemoveText: {fontSize: 19, lineHeight: 22, color: c.muted},
+    taskPriorityTag: {alignSelf: 'flex-start', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 5},
+    taskPriorityText: {fontSize: 8, fontWeight: '900', letterSpacing: 0.5},
+    priorityHigh: {backgroundColor: '#F7E0DB'},
+    priorityMedium: {backgroundColor: '#F2E8D0'},
+    priorityLow: {backgroundColor: c.accent + '55'},
+    priorityTextHigh: {color: '#9E4636'},
+    priorityTextMedium: {color: '#8D6A2E'},
+    priorityTextLow: {color: c.primary},
   });
 }

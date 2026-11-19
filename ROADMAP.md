@@ -15,10 +15,11 @@
 - [x] Create initial React Native Android project foundation.
 - [x] Add SQLite schema for subjects, classes, tasks, notes, activities and settings.
 - [x] Add initial dashboard, local list creation and appearance selector.
-- [ ] Verify first GitHub Actions build and fix all build failures.
-- [ ] Complete schedule CRUD, weekly timetable and conflict detection.
-- [ ] Complete tasks, personal activities, notes and subject linking.
-- [ ] Complete budget transactions, income/expense categories, monthly limits and savings goals.
+- [x] Verify initial and iterative GitHub Actions debug APK builds.
+- [x] Implement the core weekly timetable, subject/class creation, class removal and overlap detection.
+- [x] Implement the Tasks overview with categories, priorities, due dates, search, filters and completion tracking.
+- [ ] Complete task editing, checklists, personal activities, notes and subject linking.
+- [ ] Complete budget analytics, category limits and savings-goal tracking.
 - [ ] Implement lecture file import and offline viewing.
 - [ ] Implement complete dashboard aggregation and cross-module refresh.
 - [ ] Implement alarms, local notifications and reminder scheduling.

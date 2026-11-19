@@ -33,9 +33,23 @@ export async function openDatabase() {
       title TEXT NOT NULL,
       details TEXT NOT NULL DEFAULT '',
       due_at TEXT,
+      priority TEXT NOT NULL DEFAULT 'Medium',
+      category TEXT NOT NULL DEFAULT 'Assignment',
       completed INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );`);
+    const [taskColumnInfo] = await tx.executeSql('PRAGMA table_info(tasks);');
+    const existingTaskColumns = [];
+    for (let i = 0; i < taskColumnInfo.rows.length; i += 1) {
+      existingTaskColumns.push(taskColumnInfo.rows.item(i).name);
+    }
+    if (!existingTaskColumns.includes('priority')) {
+      await tx.executeSql("ALTER TABLE tasks ADD COLUMN priority TEXT NOT NULL DEFAULT 'Medium';");
+    }
+    if (!existingTaskColumns.includes('category')) {
+      await tx.executeSql("ALTER TABLE tasks ADD COLUMN category TEXT NOT NULL DEFAULT 'Assignment';");
+    }
+    await tx.executeSql('CREATE INDEX IF NOT EXISTS idx_tasks_due_completed ON tasks (due_at, completed);');
     await tx.executeSql(`CREATE TABLE IF NOT EXISTS notes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       subject_id INTEGER,

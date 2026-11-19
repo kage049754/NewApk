@@ -16,6 +16,12 @@ Initial React Native foundation committed to `main`.
 - GitHub Actions debug APK workflow.
 - User-selected visual references for all seven modules documented in [UI_DESIGN_REFERENCES.md](UI_DESIGN_REFERENCES.md).
 
+## Tasks module update
+- Added task priorities (Low / Medium / High), categories, optional calendar-date due dates and local persistence.
+- Added weekly completion overview, open / due-this-week / completed counts, text search, All / Today / Upcoming / Completed filters, task completion controls and delete confirmation.
+- Added a backward-compatible SQLite migration: existing task rows receive default Medium priority and Assignment category; new installs create the same columns directly.
+- Task editing, checklists/subtasks, recurring tasks and reminder scheduling remain incomplete.
+
 ## Build verification
 - GitHub Actions run #12 for commit `b0ae2a1dbf46c6bc69d9f38a1c34305c83e415cb` completed successfully.
 - All build job steps completed successfully, including `Build debug APK` and `Upload APK`.
@@ -27,8 +33,13 @@ Initial React Native foundation committed to `main`.
 - Selected layouts: Home #3, Schedule #6, Tasks #8, Budget #9, Notepad #12, Lecture Files #14, Settings / Appearance #16.
 - These are implementation references only; the corresponding finished screens have not yet been built to match them.
 
+## Schedule and build verification update
+- Core weekly timetable, subject/class creation, class removal and overlap validation are implemented.
+- GitHub Actions run #20 for commit `1bf9f4da43ac05270a5fd9c1420a22674dda615d` completed successfully; APK artifact `NewApk-debug` uploaded (33,193,954 bytes, artifact ID `14502061185`).
+- The build verifies compilation and artifact upload only; it does not verify emulator launch or runtime behavior.
+
 ## Known incomplete areas
-Schedule editor/timetable and subject management, file import/viewer, persistent theme settings, reminders/alarms, widgets, full backup/restore, savings goals, data migration and comprehensive tests.
+Task editing/checklists, personal activity CRUD, note editing/subject linking, budget category analytics and savings goals, lecture file import/viewer, persistent theme settings, reminders/alarms, widgets, full backup/restore, data migration and comprehensive tests.
 
 ## Next action
-Inspect the first GitHub Actions run, fix failures using the actual logs, rebuild and verify the APK artifact before proceeding.
+Implement Budget #9 as a full spending overview with category summaries, monthly limits and savings goals, then inspect the next Android Actions result and verify its APK artifact.
