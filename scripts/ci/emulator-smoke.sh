@@ -240,6 +240,14 @@ dump_ui
 adb shell input swipe "$NAV_LEFT_X" "$TAB_Y" "$NAV_RIGHT_X" "$TAB_Y" 450
 dump_ui
 ui_click_text "Home" bottom
+
+# React Native keeps the Home ScrollView offset when changing tabs. Move it
+# back to the top before asserting the greeting and saving the final screenshot.
+for attempt in $(seq 1 8); do
+  if dump_ui && ui_has_text "Make today count."; then break; fi
+  adb shell input swipe "$SCREEN_CENTER_X" "$SCROLL_END_Y" "$SCREEN_CENTER_X" "$SCROLL_START_Y" 450
+  sleep 1
+done
 ui_wait_text "Make today count."
 ui_wait_text "1 tasks to finish"
 adb shell screencap -p /sdcard/newapk-home.png
