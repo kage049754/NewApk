@@ -43,6 +43,20 @@ export default function App() {
   const [summary, setSummary] = useState({subjects: 0, pendingTasks: 0, notes: 0, classes: 0});
   const [subjects, setSubjects] = useState([]);
   const [todayClasses, setTodayClasses] = useState([]);
+  const [allClasses, setAllClasses] = useState([]);
+  const [scheduleDay, setScheduleDay] = useState(new Date().getDay());
+  const [scheduleFormType, setScheduleFormType] = useState('class');
+  const [scheduleSubjectName, setScheduleSubjectName] = useState('');
+  const [scheduleSubjectCode, setScheduleSubjectCode] = useState('');
+  const [scheduleSubjectRoom, setScheduleSubjectRoom] = useState('');
+  const [scheduleProfessor, setScheduleProfessor] = useState('');
+  const [scheduleSubjectColor, setScheduleSubjectColor] = useState('#55745B');
+  const [scheduleClassSubjectId, setScheduleClassSubjectId] = useState('');
+  const [scheduleClassDay, setScheduleClassDay] = useState(new Date().getDay());
+  const [scheduleStart, setScheduleStart] = useState('08:00');
+  const [scheduleEnd, setScheduleEnd] = useState('09:00');
+  const [scheduleClassRoom, setScheduleClassRoom] = useState('');
+  const [scheduleClassType, setScheduleClassType] = useState('Lecture');
   const [tasks, setTasks] = useState([]);
   const [notes, setNotes] = useState([]);
   const [activities, setActivities] = useState([]);
@@ -65,10 +79,7 @@ export default function App() {
       query('SELECT * FROM subjects ORDER BY name'),
       query('SELECT * FROM tasks ORDER BY completed, CASE WHEN due_at IS NULL THEN 1 ELSE 0 END, due_at ASC, id DESC'),
       query('SELECT * FROM notes ORDER BY pinned DESC, id DESC'),
-      query(
-        'SELECT classes.*, subjects.name AS subject_name, subjects.code AS subject_code, subjects.color AS subject_color, subjects.room AS subject_room FROM classes LEFT JOIN subjects ON subjects.id = classes.subject_id WHERE classes.day_of_week = ? ORDER BY classes.start_time',
-        [dayOfWeek],
-      ),
+      query('SELECT classes.*, subjects.name AS subject_name, subjects.code AS subject_code, subjects.color AS subject_color, subjects.room AS subject_room FROM classes LEFT JOIN subjects ON subjects.id = classes.subject_id ORDER BY classes.day_of_week, classes.start_time'),
       query('SELECT * FROM activities WHERE starts_at IS NOT NULL ORDER BY starts_at ASC LIMIT 5'),
       query("SELECT * FROM budget_transactions WHERE strftime('%Y-%m', occurred_at, 'localtime') = strftime('%Y-%m', 'now', 'localtime') ORDER BY occurred_at DESC, id DESC"),
       query("SELECT limit_amount FROM monthly_budgets WHERE month = strftime('%Y-%m', 'now', 'localtime') LIMIT 1"),
@@ -77,7 +88,8 @@ export default function App() {
     setSubjects(subjectRows);
     setTasks(taskRows);
     setNotes(noteRows);
-    setTodayClasses(classRows);
+    setAllClasses(classRows);
+    setTodayClasses(classRows.filter(item => Number(item.day_of_week) === dayOfWeek));
     setActivities(activityRows);
     setTransactions(transactionRows);
     setMonthlyLimit(limitRows[0]?.limit_amount || 0);
