@@ -1,4 +1,4 @@
-const {getDashboardTaskSummary, getSavingsSummary} = require('../src/data/dashboardSummary');
+const {getDashboardTaskSummary, getNextClassSummary, getSavingsSummary} = require('../src/data/dashboardSummary');
 
 describe('Home dashboard task summary', () => {
   test('separates overdue tasks from tasks due today through Sunday', () => {

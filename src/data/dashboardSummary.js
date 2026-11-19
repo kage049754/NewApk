@@ -39,8 +39,8 @@ function getNextClassSummary(classes = [], now = new Date()) {
   const currentMinutes = safeNow.getHours() * 60 + safeNow.getMinutes();
   const rows = (Array.isArray(classes) ? classes : [])
     .map(item => {
-      const startMatch = /^(?:([01]\\d|2[0-3])):([0-5]\\d)$/.exec(String(item && item.start_time || ''));
-      const endMatch = /^(?:([01]\\d|2[0-3])):([0-5]\\d)$/.exec(String(item && item.end_time || ''));
+      const startMatch = /^(?:([01]\d|2[0-3])):([0-5]\d)$/.exec(String(item && item.start_time || ''));
+      const endMatch = /^(?:([01]\d|2[0-3])):([0-5]\d)$/.exec(String(item && item.end_time || ''));
       if (!startMatch || !endMatch) return null;
       const startMinutes = Number(startMatch[1]) * 60 + Number(startMatch[2]);
       const endMinutes = Number(endMatch[1]) * 60 + Number(endMatch[2]);
