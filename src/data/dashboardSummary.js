@@ -7,7 +7,7 @@ function localDateKey(date) {
 
 function validDateKey(value) {
   const key = String(value || '').slice(0, 10);
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(key)) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) return null;
   const [year, month, day] = key.split('-').map(Number);
   const parsed = new Date(year, month - 1, day);
   if (parsed.getFullYear() !== year || parsed.getMonth() !== month - 1 || parsed.getDate() !== day) return null;
