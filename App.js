@@ -115,7 +115,7 @@ function buildReminderPayload(classRows, taskRows, activityRows, settings, now =
       const dueDate = parseLocalDateTime(String(item.due_at).slice(0, 10), '08:00');
       if (!dueDate) return;
       dueDate.setHours(8, 0, 0, 0);
-      const reminderTime = new Date(dueDate.getTime() - settings.taskLeadMinutes * 60 * 1000);
+      const reminderTime = makeReminderTime(dueDate, settings.taskLeadMinutes);
       if (reminderTime <= now) return;
       reminders.push(makeReminderRecord(
         'task-' + item.id,
@@ -346,7 +346,7 @@ export default function App() {
     if (NativeModules.Reminders?.replaceReminders) {
       try {
         const scheduled = buildReminderPayload(classRows, taskRows, activityRows, preferences);
-        const nativeStatus = await NativeModules.Reminders.replaceReminders(JSON.stringify(scheduled));
+        const nativeStatus = await NativeModules.Reminders.replaceReminders(JSON.stringify(scheduled), preferences.enabled);
         setReminderStatus({
           notificationsEnabled: !!nativeStatus?.notificationsEnabled,
           exactAlarmAllowed: !!nativeStatus?.exactAlarmAllowed,
@@ -424,6 +424,14 @@ export default function App() {
             {text: 'Cancel', style: 'cancel'},
             {text: 'Open settings', onPress: () => NativeModules.Reminders?.openNotificationSettings?.()},
           ]);
+          const deniedStatus = await NativeModules.Reminders?.getStatus?.();
+          if (deniedStatus) {
+            setReminderStatus({
+              notificationsEnabled: !!deniedStatus.notificationsEnabled,
+              exactAlarmAllowed: !!deniedStatus.exactAlarmAllowed,
+            });
+          }
+          return false;
         }
       }
       const status = await NativeModules.Reminders?.getStatus?.();
@@ -433,10 +441,28 @@ export default function App() {
           exactAlarmAllowed: !!status.exactAlarmAllowed,
         });
       }
+      if (!status?.notificationsEnabled) {
+        Alert.alert('Notifications are disabled', 'Allow NewApk notifications in Android settings before enabling reminders.', [
+          {text: 'Cancel', style: 'cancel'},
+          {text: 'Open settings', onPress: () => NativeModules.Reminders?.openNotificationSettings?.()},
+        ]);
+        return false;
+      }
       await refresh();
+      return true;
     } catch (error) {
       Alert.alert('Could not request notification access', String(error?.message || error));
+      return false;
     }
+  };
+
+  const setAllRemindersEnabled = async enabled => {
+    if (!enabled) {
+      await saveReminderPreference('enabled', false);
+      return;
+    }
+    const allowed = await requestNotificationAccess();
+    if (allowed) await saveReminderPreference('enabled', true);
   };
 
   const openExactAlarmSettings = async () => {
@@ -1705,7 +1731,7 @@ export default function App() {
               <Text style={styles.reminderSettingLabel}>Enable reminders</Text>
               <Text style={styles.reminderSettingHint}>Turn all local reminders on or off.</Text>
             </View>
-            <Switch value={reminderSettings.enabled} onValueChange={value => saveReminderPreference('enabled', value)} trackColor={{false: colors.border, true: colors.accent}} thumbColor={reminderSettings.enabled ? colors.primary : '#F4F4F4'} />
+            <Switch value={reminderSettings.enabled} onValueChange={setAllRemindersEnabled} trackColor={{false: colors.border, true: colors.accent}} thumbColor={reminderSettings.enabled ? colors.primary : '#F4F4F4'} />
           </View>
           <View style={styles.reminderSettingRow}>
             <View style={styles.reminderSettingInfo}>

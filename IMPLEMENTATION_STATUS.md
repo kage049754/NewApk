@@ -103,8 +103,10 @@ Implement local reminder scheduling for classes, tasks and personal activities (
 ## Local reminder implementation
 - Added native Android AlarmManager scheduling with a persistent local reminder queue.
 - Added weekly recurring class reminders and one-time pending-task deadline and personal-activity reminders.
-- Added notification channels for sound + vibration, sound only, vibration only and silent behavior; notifications use private lock-screen visibility and Snooze / Dismiss actions.
+- Added configurable advance notice, system alarm sound, vibration, and notification-channel combinations; notifications use private lock-screen visibility with Snooze / Dismiss actions.
 - Added rescheduling after device reboot, app replacement, time changes, time-zone changes and exact-alarm permission grants.
-- Added permission/status controls in Settings; exact alarms fall back to inexact allow-while-idle scheduling when the user has not granted exact-alarm access.
+- Added permission/status controls in Settings. Enabling reminders requests notification permission first; exact alarms fall back to inexact allow-while-idle scheduling if exact-alarm access is not granted.
+- Normal app refreshes now preserve pending snoozes; disabling all reminders clears them. Repeated snooze actions cancel the previous snooze alarm before replacing it.
+- A pending task whose advance-notice time has passed but whose 8:00 AM deadline is still ahead now receives one immediate catch-up reminder.
 - Reminder settings and event data remain on-device. Runtime notification delivery, snooze, reboot and device-specific battery behavior still require emulator/physical-device testing.
-- Build verification for this native reminder implementation is pending.
+- The original reminder implementation passed GitHub Actions run #29 (commit `c989aad8c47518201e28ebdd934972e298b1a7bb`); the corrective changes here require a fresh build.

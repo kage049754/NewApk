@@ -76,13 +76,13 @@ internal object ReminderScheduler {
 
     private const val PREFS_NAME = "newapk_reminder_store"
     private const val PREFS_ENTRIES = "entries"
-    private const val CHANNEL_SOUND_VIBRATE = "newapk_reminders_sound_vibrate"
-    private const val CHANNEL_SOUND = "newapk_reminders_sound"
-    private const val CHANNEL_VIBRATE = "newapk_reminders_vibrate"
-    private const val CHANNEL_SILENT = "newapk_reminders_silent"
-    private const val WEEK_MILLIS = 7L * 24L * 60L * 60L * 1000L
+    // Versioned IDs create fresh Android channels so existing installs receive alarm tones.
+    private const val CHANNEL_SOUND_VIBRATE = "newapk_reminders_alarm_sound_vibrate_v2"
+    private const val CHANNEL_SOUND = "newapk_reminders_alarm_sound_v2"
+    private const val CHANNEL_VIBRATE = "newapk_reminders_alarm_vibrate_v2"
+    private const val CHANNEL_SILENT = "newapk_reminders_alarm_silent_v2"
 
-    fun replaceReminders(context: Context, payload: String) {
+    fun replaceReminders(context: Context, payload: String, preserveSnoozes: Boolean) {
         val oldEntries = loadEntries(context)
         oldEntries.forEach { cancelAlarm(context, it.id) }
 
@@ -97,14 +97,26 @@ internal object ReminderScheduler {
             val normalized = normalizeEntry(entry, now) ?: continue
             entries.add(normalized)
         }
-        saveEntries(context, entries)
+
+        val snoozes = if (preserveSnoozes) {
+            oldEntries.asSequence()
+                .filter { it.id.startsWith("snooze-") }
+                .mapNotNull { normalizeEntry(it, now) }
+                .toList()
+        } else {
+            emptyList()
+        }
+        val combinedEntries = (entries + snoozes).distinctBy { it.id }
+        saveEntries(context, combinedEntries)
         createNotificationChannels(context)
-        entries.forEach { scheduleAlarm(context, it) }
+        combinedEntries.forEach { scheduleAlarm(context, it) }
     }
 
     fun restore(context: Context) {
+        val existing = loadEntries(context)
+        existing.forEach { cancelAlarm(context, it.id) }
         val now = System.currentTimeMillis()
-        val restored = loadEntries(context).mapNotNull { normalizeEntry(it, now) }
+        val restored = existing.mapNotNull { normalizeEntry(it, now) }
         saveEntries(context, restored)
         createNotificationChannels(context)
         restored.forEach { scheduleAlarm(context, it) }
@@ -143,8 +155,9 @@ internal object ReminderScheduler {
     fun handleSnooze(context: Context, intent: Intent) {
         val rootId = intent.getStringExtra(EXTRA_ROOT_ID) ?: return
         cancelNotification(context, rootId)
-        val entries = loadEntries(context).filterNot { it.rootId == rootId && it.id.startsWith("snooze-") }
-        entries.filter { it.rootId == rootId && it.id.startsWith("snooze-") }.forEach { cancelAlarm(context, it.id) }
+        val existingEntries = loadEntries(context)
+        existingEntries.filter { it.rootId == rootId && it.id.startsWith("snooze-") }.forEach { cancelAlarm(context, it.id) }
+        val entries = existingEntries.filterNot { it.rootId == rootId && it.id.startsWith("snooze-") }
 
         val snoozeMinutes = intent.getIntExtra(EXTRA_SNOOZE, 5).coerceIn(1, 60)
         val wallTime = formatWallTime(Date(System.currentTimeMillis() + snoozeMinutes * 60L * 1000L))
@@ -293,10 +306,10 @@ internal object ReminderScheduler {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = context.getSystemService(NotificationManager::class.java)
         val audioAttributes = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+            .setUsage(AudioAttributes.USAGE_ALARM)
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
             .build()
-        val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+        val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
         val definitions = listOf(
             Triple(CHANNEL_SOUND_VIBRATE, "Reminders: sound and vibration", true to true),
             Triple(CHANNEL_SOUND, "Reminders: sound only", true to false),
@@ -347,7 +360,7 @@ internal object ReminderScheduler {
             .setOngoing(false)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
-            .setCategory("reminder")
+            .setCategory("alarm")
             .addAction(android.R.drawable.ic_lock_idle_alarm, "Snooze", snoozeIntent)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Dismiss", dismissIntent)
 

@@ -17,9 +17,9 @@ class ReminderModule(private val context: ReactApplicationContext) : ReactContex
     override fun getName(): String = "Reminders"
 
     @ReactMethod
-    fun replaceReminders(payload: String, promise: Promise) {
+    fun replaceReminders(payload: String, preserveSnoozes: Boolean, promise: Promise) {
         try {
-            ReminderScheduler.replaceReminders(context, payload)
+            ReminderScheduler.replaceReminders(context, payload, preserveSnoozes)
             promise.resolve(statusMap())
         } catch (error: Exception) {
             promise.reject("E_REMINDER_SCHEDULE", error.message ?: "Could not schedule reminders.", error)
