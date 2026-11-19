@@ -7,6 +7,7 @@ import {
 import {createPlannerBackup, execute, getDashboardSummary, openDatabase, query, restorePlannerBackup} from './src/data/database';
 import {defaultCustomPalette, palettes} from './src/theme/palettes';
 import {convertCampusOsBackup} from './src/data/campusOsMigration';
+import {getDashboardTaskSummary, getSavingsSummary} from './src/data/dashboardSummary';
 
 const tabs = [
   {id: 'Home', icon: '⌂'}, {id: 'Schedule', icon: '▦'},
@@ -1489,22 +1490,13 @@ export default function App() {
   const expenses = transactions.filter(item => item.type === 'expense').reduce((sum, item) => sum + Number(item.amount), 0);
   const budgetRemaining = monthlyLimit - expenses;
   const budgetProgress = monthlyLimit > 0 ? Math.min(100, Math.max(0, expenses / monthlyLimit * 100)) : 0;
-  const pendingTasks = tasks.filter(task => !task.completed);
-  const todayKey = getLocalDateKey();
-  const weekEnd = new Date();
-  weekEnd.setHours(23, 59, 59, 999);
-  weekEnd.setDate(weekEnd.getDate() + ((7 - weekEnd.getDay()) % 7));
-  const weekEndKey = getLocalDateKey(weekEnd);
-  const dueThisWeek = pendingTasks.filter(task => {
-    if (!task.due_at) return false;
-    const dueKey = String(task.due_at).slice(0, 10);
-    return dueKey >= todayKey && dueKey <= weekEndKey;
-  });
-  const overdueTasks = pendingTasks.filter(task => task.due_at && String(task.due_at).slice(0, 10) < todayKey);
-  const savingsTargetTotal = savingsGoals.reduce((sum, goal) => sum + Math.max(0, Number(goal.target_amount) || 0), 0);
-  const savingsCurrentTotal = savingsGoals.reduce((sum, goal) => sum + Math.max(0, Number(goal.saved_amount) || 0), 0);
-  const savingsProgress = savingsTargetTotal > 0 ? Math.min(100, savingsCurrentTotal / savingsTargetTotal * 100) : 0;
   const now = new Date();
+  const taskSummary = getDashboardTaskSummary(tasks, now);
+  const {pendingTasks, dueThisWeek, overdueTasks} = taskSummary;
+  const savingsSummary = getSavingsSummary(savingsGoals);
+  const savingsTargetTotal = savingsSummary.targetTotal;
+  const savingsCurrentTotal = savingsSummary.currentTotal;
+  const savingsProgress = savingsSummary.progressPercent;
   const dateLabel = DAYS[now.getDay()] + ', ' + MONTHS[now.getMonth()] + ' ' + now.getDate();
 
   const renderHome = () => (
@@ -1669,10 +1661,10 @@ export default function App() {
               </View>
               <View style={styles.progressTrack}><View style={[styles.progressFill, {width: savingsProgress + '%'}]} /></View>
               <Text style={styles.budgetFootnote}>{Math.round(savingsProgress)}% across {savingsGoals.length} savings goal{savingsGoals.length === 1 ? '' : 's'}</Text>
-              {savingsGoals.slice(0, 2).map(goal => {
-                const target = Math.max(0, Number(goal.target_amount) || 0);
-                const saved = Math.max(0, Number(goal.saved_amount) || 0);
-                const progress = target > 0 ? Math.min(100, saved / target * 100) : 0;
+              {savingsSummary.goals.slice(0, 2).map(goal => {
+                const target = goal.targetAmount;
+                const saved = goal.savedAmount;
+                const progress = goal.progressPercent;
                 return <View key={goal.id} style={styles.activityRow}>
                   <View style={styles.activityInfo}>
                     <Text style={styles.taskTitle} numberOfLines={1}>{goal.title}</Text>

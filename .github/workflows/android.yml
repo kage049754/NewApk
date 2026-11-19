@@ -28,7 +28,7 @@ jobs:
           gradle-version: 8.10.2
       - name: Install JavaScript dependencies
         run: npm install
-      - name: Run migration unit tests
+      - name: Run unit tests
         run: npm test -- --runInBand --watchAll=false
       - name: Build debug APK
         run: gradle --no-daemon :app:assembleDebug
