@@ -241,6 +241,33 @@ function timeToMinutes(value) {
   return Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
 }
 
+function parseTaskChecklist(value) {
+  try {
+    const parsed = JSON.parse(value || '[]');
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((item, index) => {
+      if (typeof item === 'string') return {id: String(index + 1), text: item, done: false};
+      if (!item || typeof item.text !== 'string') return null;
+      return {id: String(item.id || index + 1), text: item.text, done: !!item.done};
+    }).filter(item => item && item.text.trim());
+  } catch (_) {
+    return [];
+  }
+}
+
+function makeTaskChecklist(draft, existing) {
+  const previous = parseTaskChecklist(existing);
+  const used = new Set();
+  return String(draft || '').split(String.fromCharCode(10)).map(line => line.trim()).filter(Boolean).map((text, index) => {
+    const match = previous.find(item => item.text === text && !used.has(item.id));
+    const fallback = !match ? previous[index] : null;
+    const source = match || (fallback && fallback.text === text && !used.has(fallback.id) ? fallback : null);
+    const id = source ? source.id : String(index + 1);
+    used.add(id);
+    return {id, text, done: !!(source && source.done)};
+  });
+}
+
 export default function App() {
   const [active, setActive] = useState('Home');
   const [paletteName, setPaletteName] = useState('Forest');
@@ -266,6 +293,9 @@ export default function App() {
   const [tasks, setTasks] = useState([]);
   const [taskDueDate, setTaskDueDate] = useState('');
   const [taskPriority, setTaskPriority] = useState('Medium');
+  const [editingTaskId, setEditingTaskId] = useState(null);
+  const [taskChecklistDraft, setTaskChecklistDraft] = useState('');
+  const [taskNoteId, setTaskNoteId] = useState('');
   const [taskCategory, setTaskCategory] = useState('Assignment');
   const [taskFilter, setTaskFilter] = useState('All');
   const [taskSearch, setTaskSearch] = useState('');
@@ -317,7 +347,7 @@ export default function App() {
     const [stats, subjectRows, taskRows, noteRows, fileRows, classRows, activityRows, transactionRows, limitRows, categoryBudgetRows, savingsGoalRows, reminderRows] = await Promise.all([
       getDashboardSummary(),
       query('SELECT * FROM subjects ORDER BY name'),
-      query("SELECT * FROM tasks ORDER BY completed, CASE WHEN due_at IS NULL THEN 1 ELSE 0 END, due_at ASC, CASE priority WHEN 'High' THEN 0 WHEN 'Medium' THEN 1 ELSE 2 END, id DESC"),
+      query("SELECT tasks.*, notes.title AS linked_note_title FROM tasks LEFT JOIN notes ON notes.id = tasks.note_id ORDER BY tasks.completed, CASE WHEN tasks.due_at IS NULL THEN 1 ELSE 0 END, tasks.due_at ASC, CASE tasks.priority WHEN 'High' THEN 0 WHEN 'Medium' THEN 1 ELSE 2 END, tasks.id DESC"),
       query('SELECT notes.*, subjects.name AS subject_name, subjects.code AS subject_code FROM notes LEFT JOIN subjects ON subjects.id = notes.subject_id ORDER BY notes.pinned DESC, notes.updated_at DESC, notes.id DESC'),
       query('SELECT lecture_files.*, subjects.name AS subject_name, subjects.code AS subject_code FROM lecture_files LEFT JOIN subjects ON subjects.id = lecture_files.subject_id ORDER BY lecture_files.imported_at DESC, lecture_files.id DESC'),
       query('SELECT classes.*, subjects.name AS subject_name, subjects.code AS subject_code, subjects.color AS subject_color, subjects.room AS subject_room FROM classes LEFT JOIN subjects ON subjects.id = classes.subject_id ORDER BY classes.day_of_week, classes.start_time'),
@@ -628,10 +658,24 @@ export default function App() {
             return;
           }
         }
-        await execute(
-          'INSERT INTO tasks (title, details, due_at, priority, category) VALUES (?, ?, ?, ?, ?)',
-          [value, detail.trim(), dueDate || null, taskPriority, taskCategory],
-        );
+        const existingTask = editingTaskId ? tasks.find(item => Number(item.id) === Number(editingTaskId)) : null;
+        const checklist = makeTaskChecklist(taskChecklistDraft, existingTask ? existingTask.checklist_json : '[]');
+        const linkedNoteId = taskNoteId ? Number(taskNoteId) : null;
+        if (linkedNoteId && !notes.some(note => Number(note.id) === linkedNoteId)) {
+          Alert.alert('Choose an available note', 'The selected note is no longer available. Refresh the list and choose another note.');
+          return;
+        }
+        if (editingTaskId) {
+          await execute(
+            'UPDATE tasks SET title = ?, details = ?, due_at = ?, priority = ?, category = ?, checklist_json = ?, note_id = ? WHERE id = ?',
+            [value, detail.trim(), dueDate || null, taskPriority, taskCategory, JSON.stringify(checklist), linkedNoteId, editingTaskId],
+          );
+        } else {
+          await execute(
+            'INSERT INTO tasks (title, details, due_at, priority, category, checklist_json, note_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [value, detail.trim(), dueDate || null, taskPriority, taskCategory, JSON.stringify(checklist), linkedNoteId],
+          );
+        }
       } else if (active === 'Notepad') {
         if (editingNoteId) {
           await execute(
@@ -665,6 +709,9 @@ export default function App() {
       setTaskDueDate('');
       setTaskPriority('Medium');
       setTaskCategory('Assignment');
+      setEditingTaskId(null);
+      setTaskChecklistDraft('');
+      setTaskNoteId('');
       setTaskSearch('');
       setTaskFilter('All');
       setEditingNoteId(null);
@@ -765,6 +812,7 @@ export default function App() {
       {text: 'Cancel', style: 'cancel'},
       {text: 'Delete', style: 'destructive', onPress: async () => {
         try {
+          await execute('UPDATE tasks SET note_id = NULL WHERE note_id = ?', [note.id]);
           await execute('DELETE FROM notes WHERE id = ?', [note.id]);
           await refresh();
         } catch (error) {
@@ -930,6 +978,30 @@ export default function App() {
     ]);
   };
 
+  const openTaskForm = task => {
+    setEditingTaskId(task && task.id ? task.id : null);
+    setDraft(task ? task.title : '');
+    setDetail(task ? task.details : '');
+    setTaskDueDate(task && task.due_at ? String(task.due_at).slice(0, 10) : '');
+    setTaskPriority(task ? (task.priority || 'Medium') : 'Medium');
+    setTaskCategory(task ? (task.category || 'Assignment') : 'Assignment');
+    setTaskChecklistDraft(parseTaskChecklist(task ? task.checklist_json : '').map(item => item.text).join(String.fromCharCode(10)));
+    setTaskNoteId(task && task.note_id ? String(task.note_id) : '');
+    setShowForm(true);
+  };
+
+  const toggleChecklistItem = async (task, checklistItem) => {
+    const checklist = parseTaskChecklist(task.checklist_json).map(item =>
+      item.id === checklistItem.id ? {...item, done: !item.done} : item,
+    );
+    try {
+      await execute('UPDATE tasks SET checklist_json = ? WHERE id = ?', [JSON.stringify(checklist), task.id]);
+      await refresh();
+    } catch (error) {
+      Alert.alert('Could not update checklist', String(error && error.message ? error.message : error));
+    }
+  };
+
   const toggleTask = async task => {
     try {
       await execute('UPDATE tasks SET completed = ? WHERE id = ?', [task.completed ? 0 : 1, task.id]);
@@ -1031,7 +1103,7 @@ export default function App() {
           {label: 'Notepad', icon: '✎', screen: 'Notepad'},
           {label: 'Budget', icon: '₱', screen: 'Budget'},
         ].map(item => (
-          <Pressable key={item.label} onPress={() => {setActive(item.screen); setShowForm(item.screen === 'Tasks' || item.screen === 'Notepad');}} style={styles.quickAction}>
+          <Pressable key={item.label} onPress={() => {setActive(item.screen); if (item.screen === 'Tasks') openTaskForm(null); else setShowForm(item.screen === 'Notepad');}} style={styles.quickAction}>
             <View style={styles.quickIcon}><Text style={styles.quickIconText}>{item.icon}</Text></View>
             <Text style={styles.quickLabel}>{item.label}</Text>
           </Pressable>
@@ -1313,6 +1385,7 @@ export default function App() {
                   <View style={styles.taskCardInfo}>
                     <Text style={[styles.taskCardTitle, Number(item.completed) && styles.strike]} numberOfLines={2}>{item.title}</Text>
                     {!!item.details ? <Text style={styles.taskCardDescription} numberOfLines={2}>{item.details}</Text> : null}
+                    {!!item.linked_note_title ? <Text style={styles.taskLinkedNote}>Note · {item.linked_note_title}</Text> : null}
                     <View style={styles.taskMetaRow}>
                       <Text style={styles.taskCategoryText}>{item.category || 'General'}</Text>
                       <Text style={styles.taskDueText}>{getTaskDueLabel(item.due_at)}</Text>
@@ -1322,8 +1395,26 @@ export default function App() {
                     <Text style={styles.taskRemoveText}>×</Text>
                   </Pressable>
                 </View>
-                <View style={[styles.taskPriorityTag, priorityStyle]}>
-                  <Text style={[styles.taskPriorityText, priorityTextStyle]}>{priority.toUpperCase()} PRIORITY</Text>
+                {parseTaskChecklist(item.checklist_json).length ? (
+                  <View style={styles.taskChecklistPreview}>
+                    {parseTaskChecklist(item.checklist_json).slice(0, 3).map(checkItem => (
+                      <Pressable key={checkItem.id} onPress={() => toggleChecklistItem(item, checkItem)} style={styles.taskChecklistRow} accessibilityRole="checkbox" accessibilityState={{checked: checkItem.done}} accessibilityLabel={'Checklist item ' + checkItem.text}>
+                        <View style={[styles.taskChecklistCheck, checkItem.done && styles.taskChecklistCheckDone]}>
+                          <Text style={styles.taskChecklistCheckText}>{checkItem.done ? '✓' : ''}</Text>
+                        </View>
+                        <Text style={[styles.taskChecklistText, checkItem.done && styles.strike]} numberOfLines={1}>{checkItem.text}</Text>
+                      </Pressable>
+                    ))}
+                    {parseTaskChecklist(item.checklist_json).length > 3 ? <Text style={styles.taskChecklistMore}>+{parseTaskChecklist(item.checklist_json).length - 3} more items</Text> : null}
+                  </View>
+                ) : null}
+                <View style={styles.taskCardActions}>
+                  <View style={[styles.taskPriorityTag, priorityStyle]}>
+                    <Text style={[styles.taskPriorityText, priorityTextStyle]}>{priority.toUpperCase()} PRIORITY</Text>
+                  </View>
+                  <Pressable onPress={() => openTaskForm(item)} style={styles.taskEditAction} accessibilityRole="button" accessibilityLabel={'Edit ' + item.title}>
+                    <Text style={styles.taskEditActionText}>Edit task</Text>
+                  </Pressable>
                 </View>
               </View>
             );
@@ -1334,7 +1425,7 @@ export default function App() {
             </Card>
           ) : null}
         </View>
-        <Action label="＋ Add task" onPress={() => setShowForm(true)} />
+        <Action label="＋ Add task" onPress={() => openTaskForm(null)} />
       </>
     );
   };
@@ -1965,7 +2056,7 @@ export default function App() {
       ) : showForm ? (
         <View style={styles.formOverlay}>
           <View style={styles.formCard}>
-            <Text style={styles.heading}>{active === 'Budget' ? (budgetFormMode === 'goal' ? 'New savings goal' : budgetFormMode === 'contribution' ? 'Add to savings' : budgetType === 'income' ? 'Add income' : 'Add expense') : active === 'Tasks' ? 'New task' : active === 'Notepad' && editingNoteId ? 'Edit note' : 'New note'}</Text>
+            <Text style={styles.heading}>{active === 'Budget' ? (budgetFormMode === 'goal' ? 'New savings goal' : budgetFormMode === 'contribution' ? 'Add to savings' : budgetType === 'income' ? 'Add income' : 'Add expense') : active === 'Tasks' ? (editingTaskId ? 'Edit task' : 'New task') : active === 'Notepad' && editingNoteId ? 'Edit note' : 'New note'}</Text>
             {active !== 'Budget' || budgetFormMode === 'transaction' ? (
               <TextInput value={draft} onChangeText={setDraft} placeholder={active === 'Budget' ? 'Transaction name' : 'Title'} placeholderTextColor={colors.muted} style={styles.input} />
             ) : null}
@@ -1988,6 +2079,21 @@ export default function App() {
               </View>
               <TextInput value={taskDueDate} onChangeText={setTaskDueDate} placeholder="Due date (YYYY-MM-DD)" placeholderTextColor={colors.muted} style={styles.input} autoCapitalize="none" maxLength={10} />
               <Text style={styles.formSubtitle}>Leave the due date blank when there is no deadline.</Text>
+              <Text style={styles.fieldLabel}>CHECKLIST (OPTIONAL)</Text>
+              <TextInput value={taskChecklistDraft} onChangeText={setTaskChecklistDraft} placeholder="One item per line" placeholderTextColor={colors.muted} style={[styles.input, styles.taskChecklistInput]} multiline textAlignVertical="top" accessibilityLabel="Task checklist, one item per line" />
+              <Text style={styles.formSubtitle}>Tick checklist items directly from the task card.</Text>
+              <Text style={styles.fieldLabel}>LINK A NOTE (OPTIONAL)</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.choiceRow}>
+                <Pressable onPress={() => setTaskNoteId('')} style={[styles.choiceChip, !taskNoteId && styles.choiceChipSelected]}>
+                  <Text style={[styles.choiceChipText, !taskNoteId && styles.choiceChipTextSelected]}>None</Text>
+                </Pressable>
+                {notes.map(note => (
+                  <Pressable key={note.id} onPress={() => setTaskNoteId(String(note.id))} style={[styles.choiceChip, taskNoteId === String(note.id) && styles.choiceChipSelected]}>
+                    <Text style={[styles.choiceChipText, taskNoteId === String(note.id) && styles.choiceChipTextSelected]} numberOfLines={1}>{note.title}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+              <Text style={styles.formSubtitle}>{taskNoteId ? 'This task is linked to the selected note.' : 'Connect a note with instructions or study material.'}</Text>
             </> : null}
             {active === 'Budget' && budgetFormMode === 'transaction' ? <>
               <TextInput value={amount} onChangeText={setAmount} keyboardType="decimal-pad" placeholder="Amount (₱)" placeholderTextColor={colors.muted} style={styles.input} />
@@ -2219,6 +2325,18 @@ function makeStyles(c) {
     taskRemove: {width: 26, height: 26, borderRadius: 9, backgroundColor: c.background, alignItems: 'center', justifyContent: 'center'},
     taskRemoveText: {fontSize: 19, lineHeight: 22, color: c.muted},
     taskPriorityTag: {alignSelf: 'flex-start', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 5},
+    taskCardActions: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'},
+    taskEditAction: {paddingHorizontal: 9, paddingVertical: 5, borderRadius: 8, backgroundColor: c.background, borderWidth: 1, borderColor: c.border},
+    taskEditActionText: {fontSize: 9, fontWeight: '800', color: c.primary},
+    taskLinkedNote: {fontSize: 9, color: c.primary, fontWeight: '700'},
+    taskChecklistPreview: {gap: 6, paddingTop: 3},
+    taskChecklistRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
+    taskChecklistCheck: {width: 17, height: 17, borderRadius: 5, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center'},
+    taskChecklistCheckDone: {backgroundColor: c.primary, borderColor: c.primary},
+    taskChecklistCheckText: {fontSize: 10, color: '#FFFFFF', fontWeight: '900'},
+    taskChecklistText: {fontSize: 10, color: c.text, flex: 1},
+    taskChecklistMore: {fontSize: 8, color: c.muted, fontWeight: '700'},
+    taskChecklistInput: {minHeight: 96, lineHeight: 18},
     taskPriorityText: {fontSize: 8, fontWeight: '900', letterSpacing: 0.5},
     priorityHigh: {backgroundColor: '#F7E0DB'},
     priorityMedium: {backgroundColor: '#F2E8D0'},

@@ -36,6 +36,8 @@ export async function openDatabase() {
       priority TEXT NOT NULL DEFAULT 'Medium',
       category TEXT NOT NULL DEFAULT 'Assignment',
       completed INTEGER NOT NULL DEFAULT 0,
+      checklist_json TEXT NOT NULL DEFAULT '[]',
+      note_id INTEGER,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );`);
     const [taskColumnInfo] = await tx.executeSql('PRAGMA table_info(tasks);');
@@ -48,6 +50,12 @@ export async function openDatabase() {
     }
     if (!existingTaskColumns.includes('category')) {
       await tx.executeSql("ALTER TABLE tasks ADD COLUMN category TEXT NOT NULL DEFAULT 'Assignment';");
+    }
+    if (!existingTaskColumns.includes('checklist_json')) {
+      await tx.executeSql("ALTER TABLE tasks ADD COLUMN checklist_json TEXT NOT NULL DEFAULT '[]';");
+    }
+    if (!existingTaskColumns.includes('note_id')) {
+      await tx.executeSql('ALTER TABLE tasks ADD COLUMN note_id INTEGER;');
     }
     await tx.executeSql('CREATE INDEX IF NOT EXISTS idx_tasks_due_completed ON tasks (due_at, completed);');
     await tx.executeSql(`CREATE TABLE IF NOT EXISTS notes (

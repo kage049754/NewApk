@@ -20,10 +20,12 @@
 - [x] Implement the Tasks overview with categories, priorities, due dates, search, filters and completion tracking.
 - [x] Implement Notepad categories, subject linking, note editing, pinning, search and deletion.
 - [x] Implement personal activity and appointment create/edit/delete with date/time, notes and a Home dashboard preview.
-- [ ] Complete task editing, checklists and task-note linking.
-- [ ] Complete budget analytics, category limits and savings-goal tracking.
+- [x] Complete task editing, checklists and optional task-to-Notepad linking.
+- [x] Implement category spending analytics, monthly category limits and savings-goal tracking.
+- [ ] Add budget transaction editing/deletion, reports and category-limit rollover.
 - [x] Add the offline lecture-file library, subject/category grouping, Android document picker, private file copies and external-app opening (CI/runtime verification pending).
-- [ ] Implement complete dashboard aggregation and cross-module refresh.
+- [x] Implement cross-module dashboard refresh and local widget synchronization after planner data changes.
+- [ ] Complete dashboard summaries and profile personalization.
 - [x] Implement local notifications, class/task/activity reminders, sound/vibration, snooze/dismiss, boot/time-change rescheduling and exact-alarm access.
 - [ ] Test actual notification delivery, alarm sound/vibration, snooze/dismiss, reboot recovery and device-specific battery behavior.
 - [x] Implement seven Android home-screen widgets: Today&#39;s Classes, Weekly Schedule, Upcoming Tasks, Deadline Overview, Budget Overview, Savings Goals and Quick Expense.

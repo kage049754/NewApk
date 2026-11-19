@@ -129,3 +129,19 @@ Implement local reminder scheduling for classes, tasks and personal activities (
 
 - The first widget build failure was corrected by rewriting apostrophes in Android string resources; run #32 then passed resource merging.
 - Run #32 for commit `d890723eedbb475648298305a8eb093f11a2967e` then failed at Kotlin compilation because public widget providers extended an internal base class. The base provider is now public; a new build is pending.
+
+
+## Task editing, checklist and note linking
+- Added an Edit Task flow that restores title, details, due date, priority and category, then updates the existing SQLite row instead of creating a duplicate.
+- Added optional per-task checklists stored in SQLite JSON. Items can be checked directly from each task card, and completion states are preserved when the task is edited.
+- Added optional task-to-Notepad linking. Linked note titles appear in task cards; deleting a linked note clears the task link safely.
+- Added backward-compatible SQLite migrations for existing task rows. Existing tasks are retained and receive an empty checklist and no linked note.
+- Build verification for this change is pending.
+
+## Widget build verification
+- GitHub Actions run #33 for commit `0ea7f91ed32e6fca59b4fb87b7cbe0af1be3a177` completed successfully. Android debug APK compilation and artifact upload passed.
+- Artifact `NewApk-debug`: 33,237,646 bytes (artifact ID `14514373680`). CI confirms compilation and upload only; launcher and device interactions remain untested.
+
+## Reminder build verification
+- GitHub Actions run #30 for commit `f119dc4c0c1e254aec10753d58ac7aabb790dbdf` completed successfully. Android debug APK compilation and artifact upload passed.
+- Runtime notification delivery, alarm tone, snooze/dismiss and reboot recovery still require emulator/physical-device testing.
