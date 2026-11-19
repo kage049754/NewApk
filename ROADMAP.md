@@ -17,6 +17,7 @@
 - [x] Add initial dashboard, local list creation and appearance selector.
 - [x] Verify initial and iterative GitHub Actions debug APK builds.
 - [x] Implement the core weekly timetable, subject/class creation, class removal and overlap detection.
+- [x] Add the seven-day horizontal timetable grid with per-day class blocks and a switchable Day detail view.
 - [x] Implement the Tasks overview with categories, priorities, due dates, search, filters and completion tracking.
 - [x] Implement Notepad categories, subject linking, note editing, pinning, search and deletion.
 - [x] Implement personal activity and appointment create/edit/delete with date/time, notes and a Home dashboard preview.

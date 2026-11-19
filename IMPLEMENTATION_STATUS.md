@@ -244,3 +244,12 @@ Implement local reminder scheduling for classes, tasks and personal activities (
 - Downloaded standalone QA artifact `NewApk-standalone-qa` (artifact ID `14543302221`; ZIP size 19,381,069 bytes). The extracted APK is 48,058,325 bytes, contains `classes.dex` and `assets/index.android.bundle` (989,356 bytes), and passed APK ZIP integrity inspection.
 - Standalone QA APK SHA-256: `7413a8c77c3b6926de561d86fd900f2e1845bd7a11a8f6f82c4e35258f0e98ef`.
 - CI signature verification passed. It is a QA build signed with the generated Android debug key, not a production-signed release. Runtime and physical-device tests remain pending.
+
+
+## Weekly Schedule grid and CI verification
+- Changed Schedule's default presentation from a single-day list to a seven-day, horizontally scrollable timetable. Each weekday column shows its classes in start-time order, with time range, subject code/name, Lecture/Lab type and room.
+- Tapping a day header or class opens the existing Day view for the selected weekday, where existing class removal and add-class/subject actions remain available. The Day view can be toggled back to Week view.
+- GitHub Actions run #52 for commit `e384eb62d9a26ea5eb1f02421dc9a5bd2fc3e4ec` passed all unit tests, Android debug and standalone QA builds, embedded bundle and signature verification, both artifact uploads and runner cleanup.
+- Downloaded standalone QA artifact `NewApk-standalone-qa` (artifact ID `14542593629`; ZIP size 19,382,676 bytes). ZIP and extracted APK archive integrity checks passed. APK size: 48,060,025 bytes; `classes.dex` and `assets/index.android.bundle` (992,588 bytes) are present.
+- Standalone QA APK SHA-256: `065b2c42cb876232c6cdb515369cffd1e40ab3d761c8525d5a9c9bb08214d3a9`.
+- CI signature verification passed. This is a QA-signed APK, not a production-signed release. Weekly grid rendering, scrolling, class taps and persistence have not been emulator- or device-tested.
