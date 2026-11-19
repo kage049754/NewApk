@@ -16,7 +16,7 @@ NewApk is an independent project. The original CampusOS repository is a referenc
 - Tasks and personal activities
 - Local reminders, alarms and vibration
 - Android home-screen widgets
-- Appearance presets and custom color combinations
+- Appearance presets and custom color combinations (saved locally)
 - Settings, local backup and restore
 
 ### Explicitly excluded

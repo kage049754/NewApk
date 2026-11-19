@@ -4,7 +4,7 @@ import {
   StyleSheet, Text, TextInput, Pressable, View,
 } from 'react-native';
 import {execute, getDashboardSummary, openDatabase, query} from './src/data/database';
-import {palettes} from './src/theme/palettes';
+import {defaultCustomPalette, palettes} from './src/theme/palettes';
 
 const tabs = [
   {id: 'Home', icon: '⌂'}, {id: 'Schedule', icon: '▦'},
@@ -49,6 +49,28 @@ function fileKind(mimeType, name) {
   return 'Document';
 }
 
+function isValidHexColor(value) {
+  return /^#[0-9a-fA-F]{6}$/.test(String(value || ''));
+}
+
+function isDarkHexColor(value) {
+  if (!isValidHexColor(value)) return false;
+  const hex = value.slice(1);
+  const channels = [0, 2, 4].map(index => parseInt(hex.slice(index, index + 2), 16) / 255);
+  const linear = channels.map(channel => channel <= 0.03928 ? channel / 12.92 : Math.pow((channel + 0.055) / 1.055, 2.4));
+  return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2] < 0.35;
+}
+
+const CUSTOM_COLOR_FIELDS = [
+  {key: 'background', label: 'App background'},
+  {key: 'surface', label: 'Cards and surfaces'},
+  {key: 'primary', label: 'Primary color'},
+  {key: 'accent', label: 'Accent color'},
+  {key: 'text', label: 'Main text'},
+  {key: 'muted', label: 'Secondary text'},
+  {key: 'border', label: 'Borders'},
+];
+
 function greetingForHour(hour) {
   if (hour < 12) return 'Good morning';
   if (hour < 18) return 'Good afternoon';
@@ -74,6 +96,8 @@ function getTaskDueLabel(value) {
 export default function App() {
   const [active, setActive] = useState('Home');
   const [paletteName, setPaletteName] = useState('Forest');
+  const [customPalette, setCustomPalette] = useState({...defaultCustomPalette});
+  const [customPaletteDraft, setCustomPaletteDraft] = useState({...defaultCustomPalette});
   const [summary, setSummary] = useState({subjects: 0, pendingTasks: 0, notes: 0, classes: 0});
   const [subjects, setSubjects] = useState([]);
   const [todayClasses, setTodayClasses] = useState([]);
@@ -129,7 +153,7 @@ export default function App() {
   const [detail, setDetail] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [budgetType, setBudgetType] = useState('expense');
-  const colors = palettes[paletteName] || palettes.Forest;
+  const colors = paletteName === 'Custom' ? customPalette : (palettes[paletteName] || palettes.Forest);
 
   const refresh = async () => {
     const dayOfWeek = new Date().getDay(); // Schedule convention: Sunday=0 through Saturday=6.
@@ -162,12 +186,75 @@ export default function App() {
 
   useEffect(() => {
     openDatabase()
-      .then(refresh)
+      .then(async () => {
+        const savedAppearance = await query(
+          'SELECT key, value FROM settings WHERE key IN (?, ?)',
+          ['appearance_palette', 'appearance_custom_palette'],
+        );
+        const savedValues = {};
+        savedAppearance.forEach(item => { savedValues[item.key] = item.value; });
+
+        let restoredCustom = {...defaultCustomPalette};
+        if (savedValues.appearance_custom_palette) {
+          try {
+            const parsed = JSON.parse(savedValues.appearance_custom_palette);
+            CUSTOM_COLOR_FIELDS.forEach(field => {
+              if (isValidHexColor(parsed[field.key])) restoredCustom[field.key] = parsed[field.key];
+            });
+          } catch (_) {
+            // Keep the safe built-in custom colors when stored JSON is damaged.
+          }
+        }
+        setCustomPalette(restoredCustom);
+        setCustomPaletteDraft(restoredCustom);
+
+        const availablePalettes = [...Object.keys(palettes), 'Custom'];
+        if (availablePalettes.includes(savedValues.appearance_palette)) {
+          setPaletteName(savedValues.appearance_palette);
+        }
+        await refresh();
+      })
       .catch(error => Alert.alert('Storage unavailable', String(error)))
       .finally(() => setLoading(false));
   }, []);
 
   const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  const chooseAppearance = async name => {
+    try {
+      await execute(
+        'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+        ['appearance_palette', name],
+      );
+      setPaletteName(name);
+    } catch (error) {
+      Alert.alert('Could not save appearance', String(error?.message || error));
+    }
+  };
+
+  const saveCustomAppearance = async () => {
+    const invalidFields = CUSTOM_COLOR_FIELDS.filter(field => !isValidHexColor(customPaletteDraft[field.key]));
+    if (invalidFields.length) {
+      Alert.alert('Invalid color values', 'Use six-digit HEX colors such as #45664D for: ' + invalidFields.map(field => field.label).join(', ') + '.');
+      return;
+    }
+    const nextPalette = {...customPaletteDraft};
+    try {
+      await execute(
+        'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+        ['appearance_custom_palette', JSON.stringify(nextPalette)],
+      );
+      await execute(
+        'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+        ['appearance_palette', 'Custom'],
+      );
+      setCustomPalette(nextPalette);
+      setPaletteName('Custom');
+      Alert.alert('Appearance saved', 'Your custom color combination is now applied across NewApk.');
+    } catch (error) {
+      Alert.alert('Could not save custom colors', String(error?.message || error));
+    }
+  };
 
   const addItem = async () => {
     try {
@@ -1245,14 +1332,55 @@ export default function App() {
       <>
         <Card>
           <Heading>Appearance</Heading>
-          <Text style={styles.bodyText}>Choose a color combination for the entire app.</Text>
+          <Text style={styles.bodyText}>Choose a saved color combination for every module. Your selection stays on this device.</Text>
           {Object.keys(palettes).map(name => (
-            <Pressable key={name} onPress={() => setPaletteName(name)} style={styles.listRow}>
+            <Pressable key={name} onPress={() => chooseAppearance(name)} style={styles.themePresetRow} accessibilityRole="button" accessibilityState={{selected: paletteName === name}}>
               <View style={[styles.paletteDot, {backgroundColor: palettes[name].primary}]} />
-              <Text style={styles.rowTitle}>{name}</Text>
-              <Text style={styles.rowHint}>{paletteName === name ? 'Selected ✓' : 'Select'}</Text>
+              <View style={styles.themePresetInfo}>
+                <Text style={styles.rowTitle}>{name}</Text>
+                <View style={styles.themeSwatchRow}>
+                  {['background', 'surface', 'primary', 'accent'].map(key => (
+                    <View key={key} style={[styles.themeSwatch, {backgroundColor: palettes[name][key], borderColor: palettes[name].border}]} />
+                  ))}
+                </View>
+              </View>
+              <Text style={styles.rowHint}>{paletteName === name ? 'Selected ✓' : 'Apply'}</Text>
             </Pressable>
           ))}
+        </Card>
+        <Card>
+          <Heading>Custom color combination</Heading>
+          <Text style={styles.bodyText}>Edit the background, cards, primary color, accent, text and borders. Enter a six-digit HEX value for each color.</Text>
+          <View style={[styles.customThemePreview, {backgroundColor: customPaletteDraft.background, borderColor: customPaletteDraft.border}]}>
+            <View style={[styles.customThemePreviewCard, {backgroundColor: customPaletteDraft.surface, borderColor: customPaletteDraft.border}]}>
+              <Text style={{color: customPaletteDraft.text, fontSize: 12, fontWeight: '800'}}>NewApk preview</Text>
+              <Text style={{color: customPaletteDraft.muted, fontSize: 10, marginTop: 3}}>Your color combination</Text>
+              <View style={styles.themeSwatchRow}>
+                {['primary', 'accent', 'text', 'muted'].map(key => (
+                  <View key={key} style={[styles.themeSwatch, {backgroundColor: customPaletteDraft[key], borderColor: customPaletteDraft.border}]} />
+                ))}
+              </View>
+            </View>
+          </View>
+          <View style={styles.appearanceColorGrid}>
+            {CUSTOM_COLOR_FIELDS.map(field => (
+              <View key={field.key} style={styles.appearanceColorField}>
+                <Text style={styles.appearanceColorLabel}>{field.label}</Text>
+                <TextInput
+                  value={customPaletteDraft[field.key]}
+                  onChangeText={value => setCustomPaletteDraft(current => ({...current, [field.key]: value}))}
+                  placeholder="#45664D"
+                  placeholderTextColor={colors.muted}
+                  autoCapitalize="characters"
+                  maxLength={7}
+                  style={styles.input}
+                  accessibilityLabel={field.label + ' HEX color'}
+                />
+              </View>
+            ))}
+          </View>
+          <Action label="Save and apply custom colors" onPress={saveCustomAppearance} />
+          <Text style={styles.formSubtitle}>{paletteName === 'Custom' ? 'Custom colors are currently active.' : 'Save to apply this custom combination.'}</Text>
         </Card>
         <Card><Heading>Data and privacy</Heading><Text style={styles.bodyText}>Your planner data is stored locally on this device. NewApk does not require an account or cloud database.</Text></Card>
         <Card><Heading>About NewApk</Heading><Text style={styles.bodyText}>React Native student productivity app · Offline-first</Text></Card>
@@ -1266,7 +1394,7 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <StatusBar barStyle={paletteName === 'Night' ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
+      <StatusBar barStyle={(paletteName === 'Night' || (paletteName === 'Custom' && isDarkHexColor(colors.background))) ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
       <View style={styles.topBar}>
         <View><Text style={styles.brand}>NewApk</Text><Text style={styles.topCaption}>STUDENT WORKSPACE</Text></View>
         <View style={styles.avatar}><Text style={styles.avatarText}>N</Text></View>
@@ -1637,5 +1765,14 @@ function makeStyles(c) {
     noteActionText: {fontSize: 9, color: c.primary, fontWeight: '900'},
     noteDeleteText: {fontSize: 9, color: c.muted, fontWeight: '800'},
     noteEditor: {minHeight: 170, lineHeight: 20},
+    themePresetRow: {flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border},
+    themePresetInfo: {flex: 1, gap: 7},
+    themeSwatchRow: {flexDirection: 'row', alignItems: 'center', gap: 6},
+    themeSwatch: {width: 20, height: 20, borderRadius: 7, borderWidth: 1},
+    customThemePreview: {borderWidth: 1, borderRadius: 16, padding: 9},
+    customThemePreviewCard: {borderWidth: 1, borderRadius: 12, padding: 13, gap: 10},
+    appearanceColorGrid: {flexDirection: 'row', flexWrap: 'wrap', gap: 9},
+    appearanceColorField: {width: '48%', flexGrow: 1, gap: 5},
+    appearanceColorLabel: {fontSize: 9, color: c.muted, fontWeight: '800'},
   });
 }

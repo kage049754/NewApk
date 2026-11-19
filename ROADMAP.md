@@ -25,7 +25,9 @@
 - [ ] Implement complete dashboard aggregation and cross-module refresh.
 - [ ] Implement alarms, local notifications and reminder scheduling.
 - [ ] Implement Android home-screen widgets.
-- [ ] Implement appearance persistence and all settings.
+- [x] Implement persistent Forest, Sunset, Monochrome and Night appearance presets.
+- [x] Add editable custom color combinations for backgrounds, cards, primary/accent, text and borders.
+- [ ] Complete the remaining settings modules, including notifications, alarms, privacy, storage and backup/restore.
 - [ ] Implement module-aware JSON backup/export and validated restore/import.
 - [ ] Add migration support for existing CampusOS JSON backups where compatible.
 - [ ] Add automated unit and UI tests.

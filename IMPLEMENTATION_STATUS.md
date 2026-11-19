@@ -11,7 +11,7 @@ Initial React Native foundation committed to `main`.
 - Basic local creation for tasks and notes; subject management will live inside Schedule.
 - Budget module foundation: local income/expense transactions and monthly spending limits.
 - Task completion toggle.
-- Forest, Sunset, Monochrome and Night palette selection (currently in-memory).
+- Forest, Sunset, Monochrome and Night palette selection, now persisted locally; editable custom color combination also saved in SQLite.
 - Main navigation shell for Home, Schedule, Tasks, Budget, Notes, Files and Settings.
 - GitHub Actions debug APK workflow.
 - User-selected visual references for all seven modules documented in [UI_DESIGN_REFERENCES.md](UI_DESIGN_REFERENCES.md).
@@ -51,7 +51,7 @@ Initial React Native foundation committed to `main`.
 - The due-date validator correction is included in this successful commit.
 
 ## Known incomplete areas
-Task editing/checklists, personal activity CRUD, note editing/subject linking, transaction editing/deletion and report export, lecture file import/viewer, persistent theme settings, reminders/alarms, widgets, full backup/restore, data migration and comprehensive tests.
+Task editing/checklists, personal activity CRUD, note editing/subject linking, transaction editing/deletion and report export, reminders/alarms, widgets, full backup/restore, data migration and comprehensive tests.
 
 ## Next action
 Implement the Lecture Files #14 document library with local file import, subject organization and offline opening, then inspect the next Android Actions result and verify its APK artifact.
@@ -78,3 +78,15 @@ Implement the Lecture Files #14 document library with local file import, subject
 - Notes can be created, edited, pinned/unpinned, deleted and optionally linked to a subject.
 - Added a backward-compatible SQLite migration for the new note category field; existing notes remain intact and default to General.
 - Build and runtime verification are pending.
+
+## Appearance settings update
+- Added SQLite persistence for the selected Forest, Sunset, Monochrome or Night preset so the theme is restored after restarting the app.
+- Added a custom palette editor for app background, card/surface, primary, accent, text, muted text and borders, with six-digit HEX validation and a live preview.
+- Custom colors are stored locally in the existing settings table; no account, server or cloud service is used.
+- Updated status-bar icon contrast for dark custom backgrounds.
+- Build verification for this appearance change is pending.
+
+## Lecture Files and Notepad build verification
+- Lecture Files implementation commit `a1d2a0629e2647fb51f2d148f19c84ef888a77b9` built successfully in GitHub Actions run #25; `NewApk-debug` artifact uploaded (33,208,984 bytes; artifact ID `14505321647`).
+- Notepad implementation commit `2e591349f856dc9538f82b4052fbe776608dadc8` built successfully in GitHub Actions run #26; `NewApk-debug` artifact uploaded (33,208,985 bytes; artifact ID `14505328496`).
+- These results verify compilation and artifact upload only. Runtime file picking, external opening and persistent data still require emulator/device testing.
