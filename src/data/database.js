@@ -52,6 +52,28 @@ export async function openDatabase() {
       ends_at TEXT,
       details TEXT NOT NULL DEFAULT ''
     );`);
+    await tx.executeSql(`CREATE TABLE IF NOT EXISTS budget_transactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      amount REAL NOT NULL CHECK(amount >= 0),
+      type TEXT NOT NULL CHECK(type IN ('income', 'expense')),
+      category TEXT NOT NULL DEFAULT 'Other',
+      note TEXT NOT NULL DEFAULT '',
+      occurred_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );`);
+    await tx.executeSql(`CREATE TABLE IF NOT EXISTS monthly_budgets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      month TEXT NOT NULL UNIQUE,
+      limit_amount REAL NOT NULL CHECK(limit_amount >= 0),
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );`);
+    await tx.executeSql(`CREATE TABLE IF NOT EXISTS savings_goals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      target_amount REAL NOT NULL CHECK(target_amount > 0),
+      saved_amount REAL NOT NULL DEFAULT 0 CHECK(saved_amount >= 0),
+      target_date TEXT
+    );`);
     await tx.executeSql(`CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
