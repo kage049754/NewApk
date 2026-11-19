@@ -9,7 +9,8 @@ NewApk is an independent project. The original CampusOS repository is a referenc
 ### Included modules
 - Home dashboard
 - Class schedule and subject management
-- Academics
+- Budget (income, expenses, categories and monthly spending limits)
+- Subject management inside Schedule
 - Subject-linked Notepad
 - Lecture Files
 - Tasks and personal activities
