@@ -342,6 +342,14 @@ export default function App() {
   const [budgetLimitDraft, setBudgetLimitDraft] = useState('');
   const [loading, setLoading] = useState(true);
   const [backupBusy, setBackupBusy] = useState(false);
+  const [storageStats, setStorageStats] = useState({
+    databaseBytes: 0,
+    databasePages: 0,
+    freePages: 0,
+    recordCounts: {subjects: 0, classes: 0, tasks: 0, notes: 0, activities: 0, transactions: 0, savingsGoals: 0},
+    lectureFileCount: 0,
+    lectureFileBytes: 0,
+  });
   const [draft, setDraft] = useState('');
   const [detail, setDetail] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -387,6 +395,31 @@ export default function App() {
     setMonthlyLimit(limitRows[0]?.limit_amount || 0);
     setCategoryBudgets(categoryBudgetRows);
     setSavingsGoals(savingsGoalRows);
+
+    const [databasePageRows, databasePageSizeRows, freePageRows, recordCountRows, lectureStorageRows] = await Promise.all([
+      query('PRAGMA page_count'),
+      query('PRAGMA page_size'),
+      query('PRAGMA freelist_count'),
+      query(`SELECT
+        (SELECT COUNT(*) FROM subjects) AS subjects,
+        (SELECT COUNT(*) FROM classes) AS classes,
+        (SELECT COUNT(*) FROM tasks) AS tasks,
+        (SELECT COUNT(*) FROM notes) AS notes,
+        (SELECT COUNT(*) FROM activities) AS activities,
+        (SELECT COUNT(*) FROM budget_transactions) AS transactions,
+        (SELECT COUNT(*) FROM savings_goals) AS savingsGoals`),
+      query('SELECT COUNT(*) AS count, COALESCE(SUM(size_bytes), 0) AS bytes FROM lecture_files'),
+    ]);
+    const pageCount = Number(databasePageRows[0]?.page_count) || 0;
+    const pageSize = Number(databasePageSizeRows[0]?.page_size) || 0;
+    setStorageStats({
+      databaseBytes: pageCount * pageSize,
+      databasePages: pageCount,
+      freePages: Number(freePageRows[0]?.freelist_count) || 0,
+      recordCounts: recordCountRows[0] || {subjects: 0, classes: 0, tasks: 0, notes: 0, activities: 0, transactions: 0, savingsGoals: 0},
+      lectureFileCount: Number(lectureStorageRows[0]?.count) || 0,
+      lectureFileBytes: Number(lectureStorageRows[0]?.bytes) || 0,
+    });
 
     const preferences = readReminderSettings(reminderRows);
     setReminderSettings(preferences);
@@ -2372,6 +2405,33 @@ export default function App() {
           </View>
           <Action label="Import CampusOS backup" secondary onPress={importCampusOsBackup} />
           <Text style={styles.formSubtitle}>NewApk backups include actual Lecture File contents (up to 12 MB total). CampusOS backups can also transfer supported subject files into this library.</Text>
+        </Card>
+        <Card>
+          <Heading>Storage and local data</Heading>
+          <Text style={styles.bodyText}>A live summary of planner records and files kept on this device. The database size is an SQLite page-allocation estimate and may not include temporary journal files.</Text>
+          <View style={styles.reminderSettingRow}>
+            <View style={styles.reminderSettingInfo}>
+              <Text style={styles.reminderSettingLabel}>Planner database</Text>
+              <Text style={styles.reminderSettingHint}>{storageStats.databasePages.toLocaleString()} SQLite pages allocated</Text>
+            </View>
+            <Text style={styles.rowHint}>{formatFileSize(storageStats.databaseBytes)}</Text>
+          </View>
+          <View style={styles.reminderSettingRow}>
+            <View style={styles.reminderSettingInfo}>
+              <Text style={styles.reminderSettingLabel}>Planner records</Text>
+              <Text style={styles.reminderSettingHint}>Subjects, classes, tasks, notes, activities, transactions and savings goals</Text>
+            </View>
+            <Text style={styles.rowHint}>{Object.values(storageStats.recordCounts).reduce((total, value) => total + (Number(value) || 0), 0).toLocaleString()}</Text>
+          </View>
+          <View style={styles.reminderSettingRow}>
+            <View style={styles.reminderSettingInfo}>
+              <Text style={styles.reminderSettingLabel}>Lecture Files</Text>
+              <Text style={styles.reminderSettingHint}>{storageStats.lectureFileCount.toLocaleString()} private copies stored in the app</Text>
+            </View>
+            <Text style={styles.rowHint}>{formatFileSize(storageStats.lectureFileBytes)}</Text>
+          </View>
+          <Action label="Refresh storage details" secondary onPress={refresh} />
+          <Text style={styles.formSubtitle}>To free space, remove files you no longer need from the Lecture Files module. Export a JSON backup before major cleanup. Do not use Android's Clear storage / Clear data option unless you intend to erase NewApk's local planner data.</Text>
         </Card>
         <Card><Heading>Data and privacy</Heading><Text style={styles.bodyText}>Your planner data is stored locally on this device. NewApk does not require an account or cloud database.</Text></Card>
         <Card><Heading>About NewApk</Heading><Text style={styles.bodyText}>React Native student productivity app · Offline-first</Text></Card>
