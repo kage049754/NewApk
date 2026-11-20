@@ -259,14 +259,24 @@ import xml.etree.ElementTree as ET
 
 path, target_hint, empty_placeholder = sys.argv[1], sys.argv[2], sys.argv[3]
 root = ET.parse(path).getroot()
+# React Native TextInput's date example remains visible as Android EditText text
+# after clearing. The form also has fixed examples for its time fields.
+known_placeholders = {
+    "Activity date": "2026-11-25",
+    "Activity start time": "09:00",
+    "Activity end time": "10:00",
+}
 for node in root.iter():
     if node.attrib.get("class") != "android.widget.EditText" or node.attrib.get("focused") != "true":
         continue
     value = node.attrib.get("text", "")
-    # React Native TextInput placeholders appear as Android EditText text
-    # while the actual input value is empty. Capture each field's exact initial
-    # placeholder before clearing it, then normalize only that known value.
-    if value in (target_hint, target_hint + " *") or (empty_placeholder and value == empty_placeholder):
+    # Capture the actual initial value before clearing it and also recognize
+    # the control's configured placeholder. This avoids treating a date/time
+    # example as user-entered content after the field has been emptied.
+    if (
+        value in (target_hint, target_hint + " *", known_placeholders.get(target_hint))
+        or (empty_placeholder and value == empty_placeholder)
+    ):
         value = ""
     print(value)
     raise SystemExit(0)
