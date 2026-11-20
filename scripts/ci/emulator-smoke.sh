@@ -401,6 +401,11 @@ verify_reminder_delivery() {
   adb shell dumpsys package "$PACKAGE_NAME" > "$REPORT_DIR/package-permissions.txt"
 
   dump_ui
+  # Settings is the rightmost item in the horizontally scrollable bottom tab
+  # bar. Reveal it before attempting to tap it, as the first screen width only
+  # shows the preceding tabs.
+  adb shell input swipe "$NAV_RIGHT_X" "$TAB_Y" "$NAV_LEFT_X" "$TAB_Y" 450
+  dump_ui
   ui_click_text "Settings" bottom
   ui_scroll_to_text "Notifications & reminders"
   ui_wait_text "Enable reminders"
