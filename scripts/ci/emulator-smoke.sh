@@ -202,15 +202,24 @@ PY
 }
 
 ui_focused_edit_text_value() {
-  python3 - "$REPORT_DIR/window.xml" <<'PY'
+  local target_hint="$1"
+  python3 - "$REPORT_DIR/window.xml" "$target_hint" <<'PY'
 import sys
 import xml.etree.ElementTree as ET
 
-root = ET.parse(sys.argv[1]).getroot()
+path, target_hint = sys.argv[1], sys.argv[2]
+root = ET.parse(path).getroot()
 for node in root.iter():
-    if node.attrib.get("class") == "android.widget.EditText" and node.attrib.get("focused") == "true":
-        print(node.attrib.get("text", ""))
-        raise SystemExit(0)
+    if node.attrib.get("class") != "android.widget.EditText" or node.attrib.get("focused") != "true":
+        continue
+    value = node.attrib.get("text", "")
+    # Android uiautomator exposes React Native TextInput placeholders as the
+    # EditText text when the actual input is empty. Normalize that placeholder
+    # so task/activity labels are never mistaken for user-entered characters.
+    if value == target_hint:
+        value = ""
+    print(value)
+    raise SystemExit(0)
 raise SystemExit("No focused Android text field was found.")
 PY
 }
@@ -233,12 +242,12 @@ ui_type_text_slow() {
         continue
       fi
       local current
-      current="$(ui_focused_edit_text_value 2>/dev/null || true)"
+      current="$(ui_focused_edit_text_value "$target_hint" 2>/dev/null || true)"
       if [[ "$current" != "$entered" ]]; then
         echo "TYPE recovery index=$((index + 1)) expected_prefix=${entered} current=${current}" | tee -a "$REPORT_DIR/tap-events.txt"
         ui_click_input_hint "$target_hint" || true
         dump_ui || true
-        current="$(ui_focused_edit_text_value 2>/dev/null || true)"
+        current="$(ui_focused_edit_text_value "$target_hint" 2>/dev/null || true)"
       fi
       if [[ "$current" == "$expected" ]]; then
         inserted=true
@@ -253,7 +262,7 @@ ui_type_text_slow() {
       adb shell input text "$character"
       sleep 0.2
       if dump_ui; then
-        current="$(ui_focused_edit_text_value 2>/dev/null || true)"
+        current="$(ui_focused_edit_text_value "$target_hint" 2>/dev/null || true)"
         if [[ "$current" == "$expected" ]]; then
           inserted=true
           entered="$expected"
