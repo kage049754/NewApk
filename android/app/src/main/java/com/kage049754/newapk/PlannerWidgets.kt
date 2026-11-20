@@ -41,9 +41,10 @@ internal object PlannerWidgetRenderer {
                 )
                 // Keep compact widgets readable rather than squeezing all three
                 // content lines into the launcher's minimum-height footprint.
+                val showSummary=availableHeight >= 140 || content.lines.isEmpty()
                 views.setViewVisibility(
                     R.id.widget_summary,
-                    if(availableHeight < 140) android.view.View.GONE else android.view.View.VISIBLE
+                    if(showSummary) android.view.View.VISIBLE else android.view.View.GONE
                 )
                 listOf(R.id.widget_line_one,R.id.widget_line_two,R.id.widget_line_three).forEachIndexed { index,viewId ->
                     val line=content.lines.getOrNull(index).orEmpty()
