@@ -716,7 +716,7 @@ capture_stage quick-expense-widget-handoff
 echo "PASS: Quick Expense widget opened the Budget expense form." | tee -a "$REPORT_DIR/widget-results.txt"
 
 # Save a local expense from the widget-opened form and verify the Budget totals.
-ui_replace_accessible_input "Transaction name" "$EXPENSE_TITLE"
+ui_replace_accessible_input "Details (optional)" "$EXPENSE_TITLE"
 ui_replace_accessible_input "Amount (₱)" "$EXPENSE_AMOUNT"
 ui_hide_keyboard
 dump_ui
