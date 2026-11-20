@@ -293,6 +293,36 @@ verify_tab() {
   echo "PASS: $tab module rendered ($expected)." | tee -a "$REPORT_DIR/navigation-results.txt"
 }
 
+pin_home_widget() {
+  local button_text="$1"
+  local provider_name="$2"
+  local stage_name="$3"
+
+  ui_scroll_to_text "Home screen widgets"
+  ui_wait_text "$button_text"
+  ui_click_text "$button_text"
+  sleep 2
+  dump_ui
+  if ! ui_has_text "Add"; then
+    echo "Android launcher did not show the widget pin confirmation for $button_text." >&2
+    [[ -s "$REPORT_DIR/window.xml" ]] && cat "$REPORT_DIR/window.xml" >&2
+    return 1
+  fi
+  capture_stage "${stage_name}-confirmation"
+  ui_click_text "Add" bottom
+  sleep 3
+  adb shell dumpsys appwidget > "$REPORT_DIR/${stage_name}-appwidget.txt"
+  if ! grep -Fq "$provider_name" "$REPORT_DIR/${stage_name}-appwidget.txt"; then
+    echo "Launcher did not register the pinned provider $provider_name." >&2
+    cat "$REPORT_DIR/${stage_name}-appwidget.txt" >&2
+    return 1
+  fi
+  adb shell input keyevent 3
+  sleep 3
+  dump_ui
+  echo "PASS: launcher pinned $provider_name." | tee -a "$REPORT_DIR/widget-results.txt"
+}
+
 ui_click_switch_accessibility() {
   local label="$1"
   dump_ui || return 1
@@ -506,6 +536,25 @@ for attempt in $(seq 1 8); do
 done
 ui_wait_text "Notifications & reminders"
 echo "PASS: Settings module rendered (Notifications & reminders)." | tee -a "$REPORT_DIR/navigation-results.txt"
+
+# Add a live SQLite-backed widget and verify its task content on the launcher.
+pin_home_widget "＋ Upcoming Tasks" "UpcomingTasksWidgetProvider" "upcoming-tasks-widget"
+ui_wait_text "$TASK_TITLE"
+capture_stage upcoming-tasks-widget-home
+
+# Return to Settings and pin Quick Expense to exercise its deep-link handoff.
+adb shell am start -W -n "$ACTIVITY_NAME" 2>&1 | tee "$REPORT_DIR/reopen-for-quick-expense-widget.txt"
+sleep 3
+dump_ui
+adb shell input swipe "$NAV_RIGHT_X" "$TAB_Y" "$NAV_LEFT_X" "$TAB_Y" 450
+dump_ui
+ui_click_text "Settings" bottom
+pin_home_widget "＋ Quick Expense" "QuickExpenseWidgetProvider" "quick-expense-widget"
+ui_wait_text "＋ Add expense"
+ui_click_text "＋ Add expense"
+ui_wait_text "Add expense"
+capture_stage quick-expense-widget-handoff
+echo "PASS: Quick Expense widget opened the Budget expense form." | tee -a "$REPORT_DIR/widget-results.txt"
 
 # Return to Home and keep a final screenshot/UI hierarchy for review.
 dump_ui
