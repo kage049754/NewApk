@@ -201,6 +201,80 @@ PY
   adb shell input tap "$x" "$y"
 }
 
+ui_type_text_slow() {
+  local value="$1"
+  # Sending the entire string at once lost keystrokes on the busy API 35
+  # emulator. Type one character at a time so React Native receives each
+  # TextInput update before the next key event.
+  for ((index = 0; index < ${#value}; index++)); do
+    adb shell input text "${value:index:1}"
+    sleep 0.12
+  done
+}
+
+ui_wait_edit_text_value() {
+  local expected="$1"
+  for attempt in $(seq 1 20); do
+    dump_ui || { sleep 1; continue; }
+    if python3 - "$REPORT_DIR/window.xml" "$expected" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+
+path, expected = sys.argv[1], sys.argv[2]
+root = ET.parse(path).getroot()
+for node in root.iter():
+    if node.attrib.get("class") == "android.widget.EditText" and node.attrib.get("text") == expected:
+        raise SystemExit(0)
+raise SystemExit(1)
+PY
+    then
+      echo "PASS: text input contains the complete value: $expected" | tee -a "$REPORT_DIR/tap-events.txt"
+      return 0
+    fi
+    sleep 1
+  done
+  echo "Text input did not contain the complete expected value: $expected" >&2
+  [[ -s "$REPORT_DIR/window.xml" ]] && cat "$REPORT_DIR/window.xml" >&2
+  return 1
+}
+
+ui_hide_keyboard() {
+  local ime_state
+  for attempt in $(seq 1 10); do
+    ime_state="$(adb shell dumpsys input_method 2>/dev/null | grep -Eo 'mInputShown[[:space:]]*=[[:space:]]*(true|false)' | tail -n 1 | tr -d '[:space:]' || true)"
+    if [[ "$ime_state" == "mInputShown=false" ]]; then
+      echo "PASS: software keyboard is hidden before form submission." | tee -a "$REPORT_DIR/tap-events.txt"
+      return 0
+    fi
+    # dump_ui also detects and dismisses transient Android launcher ANR
+    # dialogs, which can otherwise consume the Back key intended for Gboard.
+    dump_ui || true
+    adb shell input keyevent 4
+    sleep 1
+  done
+  adb shell dumpsys input_method > "$REPORT_DIR/input-method.txt" 2>&1 || true
+  if grep -Eq 'mInputShown[[:space:]]*=[[:space:]]*false' "$REPORT_DIR/input-method.txt"; then
+    echo "PASS: software keyboard is hidden before form submission." | tee -a "$REPORT_DIR/tap-events.txt"
+    return 0
+  fi
+  echo "Could not confirm that the software keyboard was hidden before tapping the form action." >&2
+  cat "$REPORT_DIR/input-method.txt" >&2
+  return 1
+}
+
+ui_wait_text_absent() {
+  local needle="$1"
+  for attempt in $(seq 1 20); do
+    if dump_ui && ! ui_has_text "$needle"; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "Timed out waiting for UI text to disappear: $needle" >&2
+  [[ -s "$REPORT_DIR/window.xml" ]] && cat "$REPORT_DIR/window.xml" >&2
+  return 1
+}
+
 capture_stage() {
   local stage="$1"
   dump_ui
@@ -367,14 +441,16 @@ ui_click_text "Add task" top
 ui_wait_text "New task"
 capture_stage task-form
 ui_click_input_hint "Title"
-adb shell input text "$TASK_TITLE"
-adb shell input keyevent 4
-dump_ui
+ui_type_text_slow "$TASK_TITLE"
+ui_wait_edit_text_value "$TASK_TITLE"
 capture_stage task-form-ready-to-save
+ui_hide_keyboard
+dump_ui
 ui_click_text "Save"
+ui_wait_text_absent "New task"
+ui_wait_text "$TASK_TITLE"
 capture_stage after-task-save
-ui_wait_text "YOUR WEEKLY OVERVIEW"
-sleep 2
+echo "PASS: task form closed and the complete task title is visible after saving." | tee "$REPORT_DIR/task-save-result.txt"
 
 # Restart the process to prove that the inserted record survives a cold app relaunch.
 adb shell am force-stop "$PACKAGE_NAME"
@@ -387,8 +463,14 @@ if [[ -z "$PID" ]]; then
   exit 1
 fi
 printf 'NewApk process after relaunch: %s\n' "$PID" | tee -a "$REPORT_DIR/process.txt"
-ui_wait_text "1 tasks to finish"
+ui_wait_text "$TASK_TITLE"
+ui_wait_text_absent "New task"
 echo "PASS: locally saved task survived app force-stop and relaunch." | tee "$REPORT_DIR/persistence-result.txt"
+
+# Reminder setup lives on Home, so return there explicitly after the Tasks
+# persistence assertion before creating the future activity.
+ui_click_text "Home" bottom
+ui_wait_text "Make today count."
 
 # Add an activity five minutes ahead, then enable reminders so the app's
 # existing catch-up logic schedules the notification within this CI run.
