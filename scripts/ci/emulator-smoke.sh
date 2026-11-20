@@ -353,7 +353,8 @@ ui_replace_accessible_input() {
   for attempt in $(seq 1 16); do
     adb shell input keyevent 67
   done
-  adb shell input text "$value"
+  ui_type_text_slow "$value"
+  ui_wait_edit_text_value "$value"
 }
 
 create_activity_reminder() {
@@ -381,9 +382,11 @@ PY
   ui_replace_accessible_input "Activity date" "$date_value"
   ui_replace_accessible_input "Activity start time" "$start_value"
   ui_replace_accessible_input "Activity end time" "$end_value"
-  adb shell input keyevent 4
+  capture_stage activity-form-ready-to-save
+  ui_hide_keyboard
   dump_ui
   ui_click_text "Save activity"
+  ui_wait_text_absent "New activity"
   ui_wait_text "Personal activities"
   ui_wait_text "$TEST_ACTIVITY_TITLE"
   echo "PASS: future activity saved for reminder delivery." | tee -a "$REPORT_DIR/reminder-test.txt"
@@ -448,9 +451,9 @@ ui_hide_keyboard
 dump_ui
 ui_click_text "Save"
 ui_wait_text_absent "New task"
-ui_wait_text "$TASK_TITLE"
+ui_wait_text "1 tasks to finish"
 capture_stage after-task-save
-echo "PASS: task form closed and the complete task title is visible after saving." | tee "$REPORT_DIR/task-save-result.txt"
+echo "PASS: task form closed and the Home task count updated after saving." | tee "$REPORT_DIR/task-save-result.txt"
 
 # Restart the process to prove that the inserted record survives a cold app relaunch.
 adb shell am force-stop "$PACKAGE_NAME"
@@ -463,9 +466,11 @@ if [[ -z "$PID" ]]; then
   exit 1
 fi
 printf 'NewApk process after relaunch: %s\n' "$PID" | tee -a "$REPORT_DIR/process.txt"
+ui_wait_text "1 tasks to finish"
+ui_click_text "Tasks" bottom
 ui_wait_text "$TASK_TITLE"
 ui_wait_text_absent "New task"
-echo "PASS: locally saved task survived app force-stop and relaunch." | tee "$REPORT_DIR/persistence-result.txt"
+echo "PASS: locally saved task survived app force-stop and relaunch and is visible in Tasks." | tee "$REPORT_DIR/persistence-result.txt"
 
 # Reminder setup lives on Home, so return there explicitly after the Tasks
 # persistence assertion before creating the future activity.
