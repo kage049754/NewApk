@@ -254,6 +254,11 @@ ui_scroll_to_text() {
   local needle="$1"
   local attempts=16
   if [[ "$#" -gt 1 ]]; then attempts="$2"; fi
+  # The Home ScrollView can restore its previous offset after an activity
+  # restart. Reset to the top before searching downward so controls above the
+  # restored viewport are not skipped by repeated upward-content swipes.
+  adb shell input swipe "$SCREEN_CENTER_X" "$SCROLL_END_Y" "$SCREEN_CENTER_X" "$SCROLL_START_Y" 450
+  sleep 1
   for attempt in $(seq 1 "$attempts"); do
     if dump_ui && ui_has_text "$needle"; then
       return 0
