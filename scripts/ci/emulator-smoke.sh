@@ -541,6 +541,14 @@ ui_replace_accessible_input() {
   dump_ui
   local empty_placeholder
   empty_placeholder="$(ui_focused_edit_text_raw_value "$label" 2>/dev/null || true)"
+  # Some forms prefill a meaningful value (the current date is an example).
+  # Keep it intact when it already equals the value this test needs; treating
+  # that same string as a placeholder would make the later assertion ambiguous.
+  if [[ "$empty_placeholder" == "$value" ]]; then
+    echo "PASS: $label already contains the requested value: $value" | tee -a "$REPORT_DIR/tap-events.txt"
+    ui_wait_edit_text_value "$value"
+    return 0
+  fi
   adb shell input keyevent 123
   for attempt in $(seq 1 16); do
     adb shell input keyevent 67
