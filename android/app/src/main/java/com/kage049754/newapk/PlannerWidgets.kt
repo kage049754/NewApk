@@ -10,6 +10,7 @@ import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.graphics.Color
 import android.net.Uri
+import android.os.Build
 import android.widget.RemoteViews
 import org.json.JSONObject
 import java.text.SimpleDateFormat
