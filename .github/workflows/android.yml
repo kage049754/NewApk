@@ -1,5 +1,11 @@
 name: Android APK
 
+# Keep one CI run per branch. New commits supersede stale builds/emulator
+# sessions instead of consuming multiple hosted runners at once.
+concurrency:
+  group: android-apk-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main]
