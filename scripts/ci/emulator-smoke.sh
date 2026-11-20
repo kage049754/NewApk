@@ -242,9 +242,9 @@ for node in root.iter():
         continue
     value = node.attrib.get("text", "")
     # Android uiautomator exposes React Native TextInput placeholders as the
-    # EditText text when the actual input is empty. Normalize that placeholder
-    # so task/activity labels are never mistaken for user-entered characters.
-    if value == target_hint:
+    # EditText text when the actual input is empty. Required fields append an
+    # asterisk (for example, "Activity name *"), so normalize that variant too.
+    if value == target_hint or value == target_hint + " *":
         value = ""
     print(value)
     raise SystemExit(0)
