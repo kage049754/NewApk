@@ -523,7 +523,9 @@ from datetime import datetime, timedelta
 import sys
 
 now = datetime.strptime(sys.argv[1], "%Y-%m-%d %H:%M")
-start = now + timedelta(minutes=5)
+# Leave time for the slow emulator text-entry flow while still triggering the
+# reminder immediately via the existing catch-up scheduling behavior.
+start = now + timedelta(minutes=20)
 end = start + timedelta(minutes=10)
 print(start.strftime("%Y-%m-%d"), start.strftime("%H:%M"), end.strftime("%H:%M"))
 PY
