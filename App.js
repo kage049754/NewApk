@@ -610,6 +610,20 @@ export default function App() {
     }
   };
 
+  const pinPlannerWidget = async (type, label) => {
+    try {
+      const requested = await NativeModules.PlannerWidgets?.requestPin?.(type);
+      if (!requested) {
+        Alert.alert(
+          'Widget pinning unavailable',
+          'This launcher cannot accept a direct add request. You can still add NewApk widgets from the Android home-screen Widgets picker.',
+        );
+      }
+    } catch (error) {
+      Alert.alert('Could not add widget', String(error?.message || error || ('Could not add ' + label + '.')));
+    }
+  };
+
   const exportPlannerData = async () => {
     if (backupBusy) return;
     if (!NativeModules.LocalBackup?.saveBackup) {
@@ -2454,6 +2468,32 @@ export default function App() {
           </View>
           <Action label="Save and apply custom colors" onPress={saveCustomAppearance} />
           <Text style={styles.formSubtitle}>{paletteName === 'Custom' ? 'Custom colors are currently active.' : 'Save to apply this custom combination.'}</Text>
+        </Card>
+        <Card>
+          <Heading>Home screen widgets</Heading>
+          <Text style={styles.bodyText}>Add offline planner snapshots to your Android home screen. Your widgets refresh when NewApk data changes.</Text>
+          <View style={styles.choiceRow}>
+            {[
+              ['today_classes', "Today's Classes"],
+              ['weekly_schedule', 'Weekly Schedule'],
+              ['upcoming_tasks', 'Upcoming Tasks'],
+              ['deadline_overview', 'Deadline Overview'],
+              ['budget_overview', 'Budget Overview'],
+              ['savings_goals', 'Savings Goals'],
+              ['quick_expense', 'Quick Expense'],
+            ].map(([type, label]) => (
+              <Pressable
+                key={type}
+                onPress={() => pinPlannerWidget(type, label)}
+                style={styles.choiceChip}
+                accessibilityRole="button"
+                accessibilityLabel={'Add ' + label + ' widget'}
+              >
+                <Text style={styles.choiceChipText}>＋ {label}</Text>
+              </Pressable>
+            ))}
+          </View>
+          <Text style={styles.formSubtitle}>Android asks you to confirm before placing a widget. You can also use the launcher's Widgets picker.</Text>
         </Card>
         <Card>
           <Heading>Notifications & reminders</Heading>
