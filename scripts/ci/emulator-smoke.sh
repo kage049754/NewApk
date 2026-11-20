@@ -201,15 +201,78 @@ PY
   adb shell input tap "$x" "$y"
 }
 
+ui_focused_edit_text_value() {
+  python3 - "$REPORT_DIR/window.xml" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+
+root = ET.parse(sys.argv[1]).getroot()
+for node in root.iter():
+    if node.attrib.get("class") == "android.widget.EditText" and node.attrib.get("focused") == "true":
+        print(node.attrib.get("text", ""))
+        raise SystemExit(0)
+raise SystemExit("No focused Android text field was found.")
+PY
+}
+
 ui_type_text_slow() {
   local value="$1"
-  # Sending the entire string at once lost keystrokes on the busy API 35
-  # emulator. Type one character at a time so React Native receives each
-  # TextInput update before the next key event.
+  local target_hint="$2"
+  local entered=""
+  # Pixel Launcher can repeatedly raise its ANR dialog while the emulator is
+  # receiving input. Type one character, then dump the hierarchy so dump_ui
+  # can press Android's Wait action before the next character is sent. Verify
+  # the focused field after every character and retry lost key events.
   for ((index = 0; index < ${#value}; index++)); do
-    adb shell input text "${value:index:1}"
-    sleep 0.12
+    local character="${value:index:1}"
+    local expected="${entered}${character}"
+    local inserted=false
+    for attempt in $(seq 1 5); do
+      if ! dump_ui; then
+        sleep 1
+        continue
+      fi
+      local current
+      current="$(ui_focused_edit_text_value 2>/dev/null || true)"
+      if [[ "$current" != "$entered" ]]; then
+        echo "TYPE recovery index=$((index + 1)) expected_prefix=${entered} current=${current}" | tee -a "$REPORT_DIR/tap-events.txt"
+        ui_click_input_hint "$target_hint" || true
+        dump_ui || true
+        current="$(ui_focused_edit_text_value 2>/dev/null || true)"
+      fi
+      if [[ "$current" == "$expected" ]]; then
+        inserted=true
+        entered="$expected"
+        break
+      fi
+      if [[ "$current" != "$entered" ]]; then
+        echo "Unexpected text field value while typing $target_hint: expected prefix '$entered', found '$current'." >&2
+        return 1
+      fi
+      printf 'TYPE character=%q index=%s/%s attempt=%s\n' "$character" "$((index + 1))" "${#value}" "$attempt" | tee -a "$REPORT_DIR/tap-events.txt"
+      adb shell input text "$character"
+      sleep 0.2
+      if dump_ui; then
+        current="$(ui_focused_edit_text_value 2>/dev/null || true)"
+        if [[ "$current" == "$expected" ]]; then
+          inserted=true
+          entered="$expected"
+          break
+        fi
+        if [[ "$current" != "$entered" ]]; then
+          echo "Unexpected value after typing $target_hint: expected '$expected', found '$current'." >&2
+          return 1
+        fi
+      fi
+      # If the key event was swallowed by a system dialog, dump_ui has
+      # dismissed it. Retry this same character before advancing.
+    done
+    if [[ "$inserted" != "true" ]]; then
+      echo "Could not enter character $((index + 1)) of $target_hint after repeated Android UI recovery attempts." >&2
+      return 1
+    fi
   done
+  echo "PASS: typed complete value into $target_hint: $entered" | tee -a "$REPORT_DIR/tap-events.txt"
 }
 
 ui_wait_edit_text_value() {
@@ -383,7 +446,7 @@ ui_replace_accessible_input() {
   for attempt in $(seq 1 16); do
     adb shell input keyevent 67
   done
-  ui_type_text_slow "$value"
+  ui_type_text_slow "$value" "$label"
   ui_wait_edit_text_value "$value"
 }
 
@@ -479,7 +542,7 @@ ui_click_text "Add task" top
 ui_wait_text "New task"
 capture_stage task-form
 ui_click_input_hint "Title"
-ui_type_text_slow "$TASK_TITLE"
+ui_type_text_slow "$TASK_TITLE" "Title"
 ui_wait_edit_text_value "$TASK_TITLE"
 capture_stage task-form-ready-to-save
 ui_hide_keyboard
