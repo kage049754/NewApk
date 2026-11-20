@@ -112,6 +112,33 @@ raise SystemExit(1)
 PY
 }
 
+ui_has_visible_text() {
+  python3 - "$REPORT_DIR/window.xml" "$1" <<'PY'
+import re
+import sys
+import xml.etree.ElementTree as ET
+
+path, needle = sys.argv[1], sys.argv[2]
+try:
+    root = ET.parse(path).getroot()
+except (OSError, ET.ParseError):
+    raise SystemExit(1)
+for node in root.iter():
+    if needle not in node.attrib.get("text", "") and needle not in node.attrib.get("content-desc", ""):
+        continue
+    match = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", node.attrib.get("bounds", ""))
+    if not match:
+        continue
+    x1, y1, x2, y2 = map(int, match.groups())
+    # React Native's scroll view can expose off-screen children in the
+    # accessibility tree with inverted/clipped bounds. Count only nodes that
+    # have a positive visible rectangle before ui_scroll_to_text returns.
+    if x2 > x1 and y2 > y1:
+        raise SystemExit(0)
+raise SystemExit(1)
+PY
+}
+
 ui_wait_text() {
   local needle="$1"
   local attempts=30
@@ -436,7 +463,7 @@ ui_scroll_to_text() {
   adb shell input swipe "$SCREEN_CENTER_X" "$SCROLL_END_Y" "$SCREEN_CENTER_X" "$SCROLL_START_Y" 450
   sleep 1
   for attempt in $(seq 1 "$attempts"); do
-    if dump_ui && ui_has_text "$needle"; then
+    if dump_ui && ui_has_visible_text "$needle"; then
       return 0
     fi
     adb shell input swipe "$SCREEN_CENTER_X" "$SCROLL_START_Y" "$SCREEN_CENTER_X" "$SCROLL_END_Y" 400
