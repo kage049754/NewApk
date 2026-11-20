@@ -446,13 +446,14 @@ pin_home_widget() {
   ui_click_text "$button_text"
   sleep 2
   dump_ui
-  if ! ui_has_text "Add"; then
+  if ! ui_has_text "Add to home screen"; then
     echo "Android launcher did not show the widget pin confirmation for $button_text." >&2
     [[ -s "$REPORT_DIR/window.xml" ]] && cat "$REPORT_DIR/window.xml" >&2
     return 1
   fi
   capture_stage "${stage_name}-confirmation"
-  ui_click_text "Add" bottom
+  # Pixel Launcher uses the full button label shown in its pin-preview sheet.
+  ui_click_text "Add to home screen" bottom
   sleep 3
   adb shell dumpsys appwidget > "$REPORT_DIR/${stage_name}-appwidget.txt"
   if ! grep -Fq "$provider_name" "$REPORT_DIR/${stage_name}-appwidget.txt"; then
