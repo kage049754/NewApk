@@ -323,21 +323,29 @@ ui_type_text_slow() {
       fi
       printf 'TYPE character=%q index=%s/%s attempt=%s\n' "$character" "$((index + 1))" "${#value}" "$attempt" | tee -a "$REPORT_DIR/tap-events.txt"
       adb shell input text "$character"
-      sleep 0.2
-      if dump_ui; then
-        current="$(ui_focused_edit_text_value "$target_hint" "$empty_placeholder" 2>/dev/null || true)"
-        if [[ "$current" == "$expected" ]]; then
-          inserted=true
-          entered="$expected"
-          break
+      # UIAutomator can briefly return an older, empty TextInput value just
+      # after Android accepted the key event (especially for date fields).
+      # Poll the focused field before deciding that the character was lost.
+      for settle_attempt in $(seq 1 8); do
+        if dump_ui; then
+          current="$(ui_focused_edit_text_value "$target_hint" "$empty_placeholder" 2>/dev/null || true)"
+          if [[ "$current" == "$expected" ]]; then
+            inserted=true
+            entered="$expected"
+            break
+          fi
         fi
-        if [[ "$current" != "$entered" ]]; then
-          echo "Unexpected value after typing $target_hint: expected '$expected', found '$current'." >&2
-          return 1
-        fi
+        sleep 0.35
+      done
+      if [[ "$inserted" == "true" ]]; then
+        break
       fi
-      # If the key event was swallowed by a system dialog, dump_ui has
-      # dismissed it. Retry this same character before advancing.
+      if [[ -n "$current" && "$current" != "$entered" ]]; then
+        echo "Unexpected value after typing $target_hint: expected '$expected', found '$current'." >&2
+        return 1
+      fi
+      # If the hierarchy stayed stale or the key event was swallowed by a
+      # system dialog, retry the same character before advancing.
     done
     if [[ "$inserted" != "true" ]]; then
       echo "Could not enter character $((index + 1)) of $target_hint after repeated Android UI recovery attempts." >&2
