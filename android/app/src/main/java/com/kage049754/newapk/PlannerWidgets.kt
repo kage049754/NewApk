@@ -249,6 +249,17 @@ internal object PlannerWidgetRegistry {
             if(ids.isNotEmpty()) PlannerWidgetRenderer.update(context,manager,type,ids)
         }
     }
+
+    fun requestPin(context:Context,type:String):Boolean {
+        if(Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false
+        val provider=providers.firstOrNull { it.first==type }?.second
+            ?: throw IllegalArgumentException("Unknown NewApk widget: $type")
+        val manager=AppWidgetManager.getInstance(context)
+        if(!manager.isRequestPinAppWidgetSupported) return false
+        // The launcher displays its own confirmation; true means the request
+        // was accepted by the launcher API, not that the widget is already pinned.
+        return manager.requestPinAppWidget(ComponentName(context,provider),null,null)
+    }
 }
 
 class PlannerWidgetsModule(private val context:com.facebook.react.bridge.ReactApplicationContext):com.facebook.react.bridge.ReactContextBaseJavaModule(context) {
@@ -257,5 +268,11 @@ class PlannerWidgetsModule(private val context:com.facebook.react.bridge.ReactAp
     fun refreshAll(promise:com.facebook.react.bridge.Promise) {
         try { PlannerWidgetRegistry.refreshAll(context); promise.resolve(true) }
         catch(error:Exception) { promise.reject("E_WIDGET_REFRESH",error.message ?: "Could not refresh widgets.",error) }
+    }
+
+    @com.facebook.react.bridge.ReactMethod
+    fun requestPin(widgetType:String,promise:com.facebook.react.bridge.Promise) {
+        try { promise.resolve(PlannerWidgetRegistry.requestPin(context,widgetType)) }
+        catch(error:Exception) { promise.reject("E_WIDGET_PIN",error.message ?: "Could not request widget placement.",error) }
     }
 }
