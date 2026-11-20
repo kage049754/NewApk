@@ -436,10 +436,42 @@ verify_tab() {
   echo "PASS: $tab module rendered ($expected)." | tee -a "$REPORT_DIR/navigation-results.txt"
 }
 
+find_widget_on_launcher_pages() {
+  local needle="$1"
+  local center_y=$((SCREEN_HEIGHT / 2))
+  local start_x=$((SCREEN_WIDTH * 85 / 100))
+  local end_x=$((SCREEN_WIDTH * 15 / 100))
+
+  # Pixel Launcher may place a newly pinned widget on the adjacent workspace
+  # page instead of the page that was visible before the pin confirmation.
+  # Search the current page and up to five adjacent pages before declaring
+  # that the widget failed to render.
+  for page in $(seq 1 6); do
+    for attempt in $(seq 1 5); do
+      if dump_ui && ui_has_text "$needle"; then
+        echo "PASS: launcher widget content is visible: $needle (workspace page $page)." | tee -a "$REPORT_DIR/widget-results.txt"
+        return 0
+      fi
+      sleep 1
+    done
+    if [[ "$page" -lt 6 ]]; then
+      adb shell input swipe "$start_x" "$center_y" "$end_x" "$center_y" 450
+      sleep 1
+    fi
+  done
+
+  adb shell dumpsys appwidget > "$REPORT_DIR/widget-launcher-state.txt" 2>&1 || true
+  adb logcat -d -v threadtime > "$REPORT_DIR/widget-launcher-logcat.txt" 2>&1 || true
+  echo "Pinned widget content was not visible on the current or adjacent Pixel Launcher workspace pages: $needle" >&2
+  [[ -s "$REPORT_DIR/window.xml" ]] && cat "$REPORT_DIR/window.xml" >&2
+  return 1
+}
+
 pin_home_widget() {
   local button_text="$1"
   local provider_name="$2"
   local stage_name="$3"
+  local widget_title="$4"
 
   ui_scroll_to_text "Home screen widgets"
   ui_wait_text "$button_text"
@@ -463,8 +495,8 @@ pin_home_widget() {
   fi
   adb shell input keyevent 3
   sleep 3
-  dump_ui
-  echo "PASS: launcher pinned $provider_name." | tee -a "$REPORT_DIR/widget-results.txt"
+  find_widget_on_launcher_pages "$widget_title"
+  echo "PASS: launcher pinned and displayed $provider_name." | tee -a "$REPORT_DIR/widget-results.txt"
 }
 
 ui_wait_checked_checkbox() {
@@ -721,7 +753,7 @@ ui_wait_text "Notifications & reminders"
 echo "PASS: Settings module rendered (Notifications & reminders)." | tee -a "$REPORT_DIR/navigation-results.txt"
 
 # Add a live SQLite-backed widget and verify its task content on the launcher.
-pin_home_widget "＋ Upcoming Tasks" "UpcomingTasksWidgetProvider" "upcoming-tasks-widget"
+pin_home_widget "＋ Upcoming Tasks" "UpcomingTasksWidgetProvider" "upcoming-tasks-widget" "Upcoming Tasks"
 ui_wait_text "$TASK_TITLE"
 capture_stage upcoming-tasks-widget-home
 
@@ -747,7 +779,7 @@ dump_ui
 adb shell input swipe "$NAV_RIGHT_X" "$TAB_Y" "$NAV_LEFT_X" "$TAB_Y" 450
 dump_ui
 ui_click_text "Settings" bottom
-pin_home_widget "＋ Quick Expense" "QuickExpenseWidgetProvider" "quick-expense-widget"
+pin_home_widget "＋ Quick Expense" "QuickExpenseWidgetProvider" "quick-expense-widget" "Quick Expense"
 ui_wait_text "＋ Add expense"
 ui_click_text "＋ Add expense"
 # The launcher widget itself contains the words "Add expense"; require the
