@@ -681,6 +681,21 @@ pin_home_widget "＋ Upcoming Tasks" "UpcomingTasksWidgetProvider" "upcoming-tas
 ui_wait_text "$TASK_TITLE"
 capture_stage upcoming-tasks-widget-home
 
+# Change the source task after pinning. The launcher widget must refresh from
+# SQLite without requiring the user to remove and re-add it.
+adb shell am start -W -n "$ACTIVITY_NAME" 2>&1 | tee "$REPORT_DIR/reopen-for-widget-refresh.txt"
+sleep 3
+dump_ui
+ui_click_text "Tasks" bottom
+ui_wait_text "$TASK_TITLE"
+ui_click_text "Mark $TASK_TITLE complete"
+ui_wait_text "1 tasks completed"
+adb shell input keyevent 3
+sleep 3
+ui_wait_text "No pending tasks."
+capture_stage upcoming-tasks-widget-after-live-refresh
+echo "PASS: Upcoming Tasks widget refreshed after the task was completed in NewApk." | tee -a "$REPORT_DIR/widget-results.txt"
+
 # Return to Settings and pin Quick Expense to exercise its deep-link handoff.
 adb shell am start -W -n "$ACTIVITY_NAME" 2>&1 | tee "$REPORT_DIR/reopen-for-quick-expense-widget.txt"
 sleep 3
@@ -712,7 +727,7 @@ for attempt in $(seq 1 8); do
   sleep 1
 done
 ui_wait_text "Make today count."
-ui_wait_text "1 tasks to finish"
+ui_wait_text "0 tasks to finish"
 adb shell screencap -p /sdcard/newapk-home.png
 adb pull /sdcard/newapk-home.png "$REPORT_DIR/home-screen.png" >/dev/null
 
