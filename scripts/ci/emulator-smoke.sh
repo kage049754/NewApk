@@ -486,9 +486,9 @@ ui_hide_keyboard
 dump_ui
 ui_click_text "Save"
 ui_wait_text_absent "New task"
-ui_wait_text "1 tasks to finish"
+ui_wait_text "$TASK_TITLE"
 capture_stage after-task-save
-echo "PASS: task form closed and the Home task count updated after saving." | tee "$REPORT_DIR/task-save-result.txt"
+echo "PASS: task form closed and the saved task row is visible in Tasks." | tee "$REPORT_DIR/task-save-result.txt"
 
 # Restart the process to prove that the inserted record survives a cold app relaunch.
 adb shell am force-stop "$PACKAGE_NAME"
