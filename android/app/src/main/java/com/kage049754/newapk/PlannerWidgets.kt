@@ -3,6 +3,7 @@ package com.kage049754.newapk
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
+import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -260,6 +261,28 @@ class DeadlineOverviewWidgetProvider:BasePlannerWidgetProvider(){ override val w
 class BudgetOverviewWidgetProvider:BasePlannerWidgetProvider(){ override val widgetType="budget_overview" }
 class SavingsGoalsWidgetProvider:BasePlannerWidgetProvider(){ override val widgetType="savings_goals" }
 class QuickExpenseWidgetProvider:BasePlannerWidgetProvider(){ override val widgetType="quick_expense" }
+
+/**
+ * Refresh date-dependent widgets when the system date, time, timezone or boot
+ * state changes. This keeps "Today's Classes" and monthly totals current even
+ * when NewApk has not been opened since the last system change.
+ */
+class PlannerWidgetRefreshReceiver : BroadcastReceiver() {
+    override fun onReceive(context:Context,intent:Intent?) {
+        when(intent?.action) {
+            Intent.ACTION_DATE_CHANGED,
+            Intent.ACTION_TIME_CHANGED,
+            Intent.ACTION_TIMEZONE_CHANGED,
+            Intent.ACTION_BOOT_COMPLETED -> {
+                try {
+                    PlannerWidgetRegistry.refreshAll(context)
+                } catch (_:Exception) {
+                    // Never block system time or boot handling for widget updates.
+                }
+            }
+        }
+    }
+}
 
 internal object PlannerWidgetRegistry {
     private val providers=listOf(
