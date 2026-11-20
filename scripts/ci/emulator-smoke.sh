@@ -691,6 +691,9 @@ ui_click_text "Settings" bottom
 pin_home_widget "＋ Quick Expense" "QuickExpenseWidgetProvider" "quick-expense-widget"
 ui_wait_text "＋ Add expense"
 ui_click_text "＋ Add expense"
+# The launcher widget itself contains the words "Add expense"; require the
+# Budget screen's unique hero label too, so a missed deep link cannot pass.
+ui_wait_text "AVAILABLE THIS MONTH"
 ui_wait_text "Add expense"
 capture_stage quick-expense-widget-handoff
 echo "PASS: Quick Expense widget opened the Budget expense form." | tee -a "$REPORT_DIR/widget-results.txt"
