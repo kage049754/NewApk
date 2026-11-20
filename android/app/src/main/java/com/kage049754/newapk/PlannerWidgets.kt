@@ -34,11 +34,29 @@ internal object PlannerWidgetRenderer {
                 views.setTextViewText(R.id.widget_summary,content.summary)
                 views.setTextColor(R.id.widget_title,theme.primary)
                 views.setTextColor(R.id.widget_summary,theme.muted)
+                val availableHeight=manager.getAppWidgetOptions(id).getInt(
+                    AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT,
+                    112
+                )
+                // Keep compact widgets readable rather than squeezing all three
+                // content lines into the launcher's minimum-height footprint.
+                views.setViewVisibility(
+                    R.id.widget_summary,
+                    if(availableHeight < 140) android.view.View.GONE else android.view.View.VISIBLE
+                )
                 listOf(R.id.widget_line_one,R.id.widget_line_two,R.id.widget_line_three).forEachIndexed { index,viewId ->
                     val line=content.lines.getOrNull(index).orEmpty()
+                    val fitsHeight=when(index) {
+                        0 -> true
+                        1 -> availableHeight >= 160
+                        else -> availableHeight >= 190
+                    }
                     views.setTextViewText(viewId,line)
                     views.setTextColor(viewId,theme.text)
-                    views.setViewVisibility(viewId,if(line.isBlank()) android.view.View.GONE else android.view.View.VISIBLE)
+                    views.setViewVisibility(
+                        viewId,
+                        if(line.isNotBlank() && fitsHeight) android.view.View.VISIBLE else android.view.View.GONE
+                    )
                 }
                 views.setTextViewText(R.id.widget_action,content.action)
                 views.setTextColor(R.id.widget_action,Color.WHITE)
@@ -223,6 +241,16 @@ abstract class BasePlannerWidgetProvider:AppWidgetProvider() {
     abstract val widgetType:String
     override fun onUpdate(context:Context,manager:AppWidgetManager,ids:IntArray) {
         PlannerWidgetRenderer.update(context,manager,widgetType,ids)
+    }
+    override fun onAppWidgetOptionsChanged(
+        context:Context,
+        manager:AppWidgetManager,
+        appWidgetId:Int,
+        newOptions:android.os.Bundle
+    ) {
+        // Rerender after a launcher resize so compact and expanded layouts
+        // use the correct number of summary rows.
+        PlannerWidgetRenderer.update(context,manager,widgetType,intArrayOf(appWidgetId))
     }
 }
 class TodayClassesWidgetProvider:BasePlannerWidgetProvider(){ override val widgetType="today_classes" }
