@@ -229,7 +229,7 @@ PY
   adb shell input tap "$x" "$y"
 }
 
-ui_focused_edit_text_value() {
+ui_focused_edit_text_raw_value() {
   local target_hint="$1"
   python3 - "$REPORT_DIR/window.xml" "$target_hint" <<'PY'
 import sys
@@ -240,11 +240,33 @@ root = ET.parse(path).getroot()
 for node in root.iter():
     if node.attrib.get("class") != "android.widget.EditText" or node.attrib.get("focused") != "true":
         continue
+    label = node.attrib.get("content-desc", "")
+    hint = node.attrib.get("hint", "")
     value = node.attrib.get("text", "")
-    # Android uiautomator exposes React Native TextInput placeholders as the
-    # EditText text when the actual input is empty. Required fields append an
-    # asterisk (for example, "Activity name *"), so normalize that variant too.
-    if value == target_hint or value == target_hint + " *":
+    if label == target_hint or hint == target_hint or value in (target_hint, target_hint + " *"):
+        print(value)
+        raise SystemExit(0)
+raise SystemExit("Focused Android text field did not match: " + target_hint)
+PY
+}
+
+ui_focused_edit_text_value() {
+  local target_hint="$1"
+  local empty_placeholder="${2:-}"
+  python3 - "$REPORT_DIR/window.xml" "$target_hint" "$empty_placeholder" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+
+path, target_hint, empty_placeholder = sys.argv[1], sys.argv[2], sys.argv[3]
+root = ET.parse(path).getroot()
+for node in root.iter():
+    if node.attrib.get("class") != "android.widget.EditText" or node.attrib.get("focused") != "true":
+        continue
+    value = node.attrib.get("text", "")
+    # React Native TextInput placeholders appear as Android EditText text
+    # while the actual input value is empty. Capture each field's exact initial
+    # placeholder before clearing it, then normalize only that known value.
+    if value in (target_hint, target_hint + " *") or (empty_placeholder and value == empty_placeholder):
         value = ""
     print(value)
     raise SystemExit(0)
@@ -255,6 +277,7 @@ PY
 ui_type_text_slow() {
   local value="$1"
   local target_hint="$2"
+  local empty_placeholder="${3:-}"
   local entered=""
   # Pixel Launcher can repeatedly raise its ANR dialog while the emulator is
   # receiving input. Type one character, then dump the hierarchy so dump_ui
@@ -270,7 +293,7 @@ ui_type_text_slow() {
         continue
       fi
       local current
-      current="$(ui_focused_edit_text_value "$target_hint" 2>/dev/null || true)"
+      current="$(ui_focused_edit_text_value "$target_hint" "$empty_placeholder" 2>/dev/null || true)"
       if [[ "$current" != "$entered" ]]; then
         echo "TYPE recovery index=$((index + 1)) expected_prefix=${entered} current=${current}" | tee -a "$REPORT_DIR/tap-events.txt"
         ui_click_input_hint "$target_hint" || true
@@ -478,11 +501,14 @@ ui_replace_accessible_input() {
   local label="$1"
   local value="$2"
   ui_click_input_hint "$label"
+  dump_ui
+  local empty_placeholder
+  empty_placeholder="$(ui_focused_edit_text_raw_value "$label" 2>/dev/null || true)"
   adb shell input keyevent 123
   for attempt in $(seq 1 16); do
     adb shell input keyevent 67
   done
-  ui_type_text_slow "$value" "$label"
+  ui_type_text_slow "$value" "$label" "$empty_placeholder"
   ui_wait_edit_text_value "$value"
 }
 
@@ -578,7 +604,9 @@ ui_click_text "Add task" top
 ui_wait_text "New task"
 capture_stage task-form
 ui_click_input_hint "Title"
-ui_type_text_slow "$TASK_TITLE" "Title"
+dump_ui
+TASK_TITLE_PLACEHOLDER="$(ui_focused_edit_text_raw_value "Title" 2>/dev/null || true)"
+ui_type_text_slow "$TASK_TITLE" "Title" "$TASK_TITLE_PLACEHOLDER"
 ui_wait_edit_text_value "$TASK_TITLE"
 capture_stage task-form-ready-to-save
 ui_hide_keyboard
