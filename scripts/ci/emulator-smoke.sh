@@ -298,7 +298,7 @@ ui_type_text_slow() {
         echo "TYPE recovery index=$((index + 1)) expected_prefix=${entered} current=${current}" | tee -a "$REPORT_DIR/tap-events.txt"
         ui_click_input_hint "$target_hint" || true
         dump_ui || true
-        current="$(ui_focused_edit_text_value "$target_hint" 2>/dev/null || true)"
+        current="$(ui_focused_edit_text_value "$target_hint" "$empty_placeholder" 2>/dev/null || true)"
       fi
       if [[ "$current" == "$expected" ]]; then
         inserted=true
@@ -313,7 +313,7 @@ ui_type_text_slow() {
       adb shell input text "$character"
       sleep 0.2
       if dump_ui; then
-        current="$(ui_focused_edit_text_value "$target_hint" 2>/dev/null || true)"
+        current="$(ui_focused_edit_text_value "$target_hint" "$empty_placeholder" 2>/dev/null || true)"
         if [[ "$current" == "$expected" ]]; then
           inserted=true
           entered="$expected"
