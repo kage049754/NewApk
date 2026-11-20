@@ -8,6 +8,8 @@ ACTIVITY_NAME="$PACKAGE_NAME/.MainActivity"
 REPORT_DIR=smoke-output
 TASK_TITLE=NewApkCiSmokeTask
 TEST_ACTIVITY_TITLE=NewApkCiReminderTest
+EXPENSE_TITLE=NewApkCiSmokeExpense
+EXPENSE_AMOUNT=25
 
 mkdir -p "$REPORT_DIR"
 capture_diagnostics() {
@@ -712,6 +714,22 @@ ui_wait_text "AVAILABLE THIS MONTH"
 ui_wait_text "Add expense"
 capture_stage quick-expense-widget-handoff
 echo "PASS: Quick Expense widget opened the Budget expense form." | tee -a "$REPORT_DIR/widget-results.txt"
+
+# Save a local expense from the widget-opened form and verify the Budget totals.
+ui_replace_accessible_input "Transaction name" "$EXPENSE_TITLE"
+ui_replace_accessible_input "Amount (₱)" "$EXPENSE_AMOUNT"
+ui_hide_keyboard
+dump_ui
+ui_click_text "Save transaction"
+ui_wait_text "₱25.00"
+echo "PASS: Quick Expense saved a ₱25 test transaction and Budget totals refreshed." | tee -a "$REPORT_DIR/widget-results.txt"
+
+# The same transaction must be reflected on Home without a manual reload.
+ui_click_text "Home" bottom
+ui_wait_text "Budget snapshot"
+ui_wait_text "₱25.00"
+capture_stage home-budget-sync
+echo "PASS: Home Budget snapshot synchronized to the new expense." | tee -a "$REPORT_DIR/widget-results.txt"
 
 # Return to Home and keep a final screenshot/UI hierarchy for review.
 dump_ui
