@@ -113,16 +113,18 @@ PY
 }
 
 ui_has_visible_text() {
-  python3 - "$REPORT_DIR/window.xml" "$1" <<'PY'
+  python3 - "$REPORT_DIR/window.xml" "$1" "$SCREEN_WIDTH" "$SCREEN_HEIGHT" <<'PY'
 import re
 import sys
 import xml.etree.ElementTree as ET
 
-path, needle = sys.argv[1], sys.argv[2]
+path, needle, width, height = sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4])
 try:
     root = ET.parse(path).getroot()
 except (OSError, ET.ParseError):
     raise SystemExit(1)
+# Reserve the bottom 10% for the fixed navigation bar and system gesture area.
+visible_bottom = int(height * 0.90)
 for node in root.iter():
     if needle not in node.attrib.get("text", "") and needle not in node.attrib.get("content-desc", ""):
         continue
@@ -130,10 +132,9 @@ for node in root.iter():
     if not match:
         continue
     x1, y1, x2, y2 = map(int, match.groups())
-    # React Native's scroll view can expose off-screen children in the
-    # accessibility tree with inverted/clipped bounds. Count only nodes that
-    # have a positive visible rectangle before ui_scroll_to_text returns.
-    if x2 > x1 and y2 > y1:
+    # A positive rectangle can still be fully obscured by the pinned bottom
+    # tab bar. Accept only coordinates inside the actual scrollable viewport.
+    if x2 > x1 and y2 > y1 and x1 >= 0 and y1 >= 0 and x2 <= width and y2 <= visible_bottom:
         raise SystemExit(0)
 raise SystemExit(1)
 PY
@@ -457,19 +458,18 @@ ui_scroll_to_text() {
   local needle="$1"
   local attempts=16
   if [[ "$#" -gt 1 ]]; then attempts="$2"; fi
-  # The Home ScrollView can restore its previous offset after an activity
-  # restart. Reset to the top before searching downward so controls above the
-  # restored viewport are not skipped by repeated upward-content swipes.
-  adb shell input swipe "$SCREEN_CENTER_X" "$SCROLL_END_Y" "$SCREEN_CENTER_X" "$SCROLL_START_Y" 450
-  sleep 1
+  # Swipe upward within the active ScrollView to reveal later controls. Do
+  # not reverse direction before checking: a text node may be in the XML while
+  # its real bounds are still clipped underneath the fixed navigation bar.
   for attempt in $(seq 1 "$attempts"); do
     if dump_ui && ui_has_visible_text "$needle"; then
+      echo "PASS: visible and tappable UI target: $needle" | tee -a "$REPORT_DIR/tap-events.txt"
       return 0
     fi
-    adb shell input swipe "$SCREEN_CENTER_X" "$SCROLL_START_Y" "$SCREEN_CENTER_X" "$SCROLL_END_Y" 400
+    adb shell input swipe "$SCREEN_CENTER_X" "$SCROLL_START_Y" "$SCREEN_CENTER_X" "$SCROLL_END_Y" 450
     sleep 1
   done
-  echo "Could not scroll to UI text: $needle" >&2
+  echo "Could not scroll to a visible UI target: $needle" >&2
   [[ -s "$REPORT_DIR/window.xml" ]] && cat "$REPORT_DIR/window.xml" >&2
   return 1
 }
