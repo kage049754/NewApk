@@ -458,6 +458,31 @@ pin_home_widget() {
   echo "PASS: launcher pinned $provider_name." | tee -a "$REPORT_DIR/widget-results.txt"
 }
 
+ui_wait_checked_checkbox() {
+  local expected_label="$1"
+  for attempt in $(seq 1 20); do
+    if dump_ui && python3 - "$REPORT_DIR/window.xml" "$expected_label" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+
+path, expected_label = sys.argv[1], sys.argv[2]
+root = ET.parse(path).getroot()
+for node in root.iter():
+    if node.attrib.get("content-desc") == expected_label and node.attrib.get("checked") == "true":
+        raise SystemExit(0)
+raise SystemExit(1)
+PY
+    then
+      echo "PASS: checkbox state is checked: $expected_label" | tee -a "$REPORT_DIR/tap-events.txt"
+      return 0
+    fi
+    sleep 1
+  done
+  echo "Checkbox did not reach the checked state: $expected_label" >&2
+  [[ -s "$REPORT_DIR/window.xml" ]] && cat "$REPORT_DIR/window.xml" >&2
+  return 1
+}
+
 ui_click_switch_accessibility() {
   local label="$1"
   dump_ui || return 1
@@ -691,7 +716,7 @@ dump_ui
 ui_click_text "Tasks" bottom
 ui_wait_text "$TASK_TITLE"
 ui_click_text "Mark $TASK_TITLE complete"
-ui_wait_text "1 tasks completed"
+ui_wait_checked_checkbox "Mark $TASK_TITLE incomplete"
 adb shell input keyevent 3
 sleep 3
 ui_wait_text "No pending tasks."
