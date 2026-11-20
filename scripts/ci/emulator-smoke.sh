@@ -525,8 +525,8 @@ ui_replace_accessible_input() {
 }
 
 create_activity_reminder() {
-  # Use the emulator clock so the activity is always five minutes in the future
-  # in the same timezone that React Native and AlarmManager use.
+  # Use the emulator clock so the activity is 20 minutes in the future,
+  # leaving time for input while React Native and AlarmManager use the same zone.
   local device_now
   device_now="$(adb shell "date '+%Y-%m-%d %H:%M'" | tr -d '\r')"
   local date_value start_value end_value
